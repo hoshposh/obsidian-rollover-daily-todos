@@ -26,3 +26,7 @@ CLAUDE.md
 # triage docs (local working notes — not committed)
 TRIAGE.md
 .triage/
+
+# e2e test artifacts written into the test vault during runs
+test/vaults/rollover/*.md
+test/vaults/rollover/.trash/
