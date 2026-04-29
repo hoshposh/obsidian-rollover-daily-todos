@@ -58,6 +58,7 @@ export default class RolloverTodosPlugin extends Plugin {
       skipHorizontalRule: true,
       skipExistingTodos: false,
       ignoreBlockquotes: false,
+      skipCompletedChildren: false,
       // (#143/#68/#54/#126/#150/#37/#33/#164) parse yesterday into per-heading
       // buckets and route each bucket to the matching heading on today's side
       rolloverToMatchingSections: false,
@@ -174,6 +175,7 @@ export default class RolloverTodosPlugin extends Plugin {
       withChildren: this.settings.rolloverChildren,
       doneStatusMarkers: this.settings.doneStatusMarkers,
       ignoreBlockquotes: this.settings.ignoreBlockquotes,
+      skipCompletedChildren: this.settings.skipCompletedChildren,
     });
   }
 

@@ -538,9 +538,6 @@ test("(#165) ignoreBlockquotes=false (default): blockquoted bullet lines are not
     "> - [ ] three (in callout body)",
   ];
   const todos = getTodos({ lines });
-  // After cluster A landed, the regex is anchored to `^\s*[*+-]`, so a line
-  // beginning with `>` is rejected at the parser level — independent of the
-  // ignoreBlockquotes setting. ignoreBlockquotes is now defence in depth.
   expect(todos).toStrictEqual(["- [ ] one"]);
 });
 
@@ -574,6 +571,71 @@ test("(#165) ignoreBlockquotes does not affect children walk for non-blockquoted
     "    - [ ] indented child todo",
   ]);
 });
+
+test("(#125) skipCompletedChildren=false (default): completed todo children are still rolled with parent", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({ lines, withChildren: true });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - [ ] open child",
+  ]);
+});
+
+test("(#125) skipCompletedChildren=true: completed todo children are dropped, non-todo children remain", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - some note",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+  });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - some note",
+    "    - [ ] open child",
+  ]);
+});
+
+test("(#125) skipCompletedChildren=true: also drops descendants of a completed child", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "        - [ ] grandchild that would otherwise survive",
+    "        - sub-note",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+  });
+  expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
+});
+
+test("(#125) respects custom done markers", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [✅] done with custom marker",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+    doneStatusMarkers: "✅",
+  });
+  expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
+});
+
 
 test("should not match malformed todos", () => {
   const lines = [
