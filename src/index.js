@@ -1,9 +1,9 @@
 import { Notice, Plugin } from "obsidian";
 import {
   getDailyNoteSettings,
-  getAllDailyNotes,
-  getDailyNote,
-} from "obsidian-daily-notes-interface";
+  getTodaysDailyNote,
+  isDailyNotesEnabled,
+} from "./daily-notes";
 import UndoModal from "./ui/UndoModal";
 import RolloverSettingTab from "./ui/RolloverSettingTab";
 import { getTodos } from "./get-todos";
@@ -57,19 +57,12 @@ export default class RolloverTodosPlugin extends Plugin {
   }
 
   isDailyNotesEnabled() {
-    const dailyNotesPlugin = this.app.internalPlugins.plugins["daily-notes"];
-    const dailyNotesEnabled = dailyNotesPlugin && dailyNotesPlugin.enabled;
-
-    const periodicNotesPlugin = this.app.plugins.getPlugin("periodic-notes");
-    const periodicNotesEnabled =
-      periodicNotesPlugin && periodicNotesPlugin.settings?.daily?.enabled;
-
-    return dailyNotesEnabled || periodicNotesEnabled;
+    return isDailyNotesEnabled(this.app);
   }
 
   getLastDailyNote() {
     const { moment } = window;
-    let { folder, format } = getDailyNoteSettings();
+    let { folder, format } = getDailyNoteSettings(this.app);
 
     folder = this.getCleanFolder(folder);
     folder = folder.length === 0 ? folder : folder + "/";
@@ -160,13 +153,12 @@ export default class RolloverTodosPlugin extends Plugin {
 
   async rollover(file = undefined) {
     /*** First we check if the file created is actually a valid daily note ***/
-    let { folder, format } = getDailyNoteSettings();
+    let { folder, format } = getDailyNoteSettings(this.app);
     let ignoreCreationTime = false;
 
     // Rollover can be called, but we need to get the daily file
     if (file == undefined) {
-      const allDailyNotes = getAllDailyNotes();
-      file = getDailyNote(window.moment(), allDailyNotes);
+      file = getTodaysDailyNote(this.app);
       ignoreCreationTime = true;
     }
     if (!file) return;
