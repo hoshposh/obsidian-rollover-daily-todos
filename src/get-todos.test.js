@@ -516,6 +516,20 @@ test("get todos supports custom status marker edge cases (inclusion)", () => {
   expect(todos).toStrictEqual(result);
 });
 
+test("does not match bullet patterns embedded mid-line (e.g. inside template literals in code blocks)", () => {
+  const lines = [
+    "```js",
+    "const items = [];",
+    "const md = items.map(t => `- [ ] ${t}`).join('\\n');",
+    "    const indented = `    - [ ] ${x}`;",
+    "```",
+    "Some prose mentioning - [ ] inline should also not match.",
+    "- [ ] this is a real todo",
+  ];
+  const todos = getTodos({ lines, withChildren: true });
+  expect(todos).toStrictEqual(["- [ ] this is a real todo"]);
+});
+
 test("should not match malformed todos", () => {
   const lines = [
     "- [ ] valid todo",
