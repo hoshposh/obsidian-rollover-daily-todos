@@ -12,42 +12,57 @@
  */
 
 import { browser } from "@wdio/globals";
-import { obsidianPage } from "wdio-obsidian-service";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 
-const VAULT_PATH = path.resolve("test/vaults/rollover");
-const ROLLOVER_CMD = "obsidian-rollover-daily-todos:obsidian-rollover-daily-todos-rollover";
+const ROLLOVER_CMD =
+  "obsidian-rollover-daily-todos:obsidian-rollover-daily-todos-rollover";
 
-// Same date math the plugin itself uses (YYYY-MM-DD via window.moment) so
-// vault contents line up with the plugin's view of "yesterday" / "today".
 async function getDateStrings() {
-  return browser.executeObsidian(({ obsidian }) => {
-    // window.moment is a global Obsidian provides
+  return browser.executeObsidian(() => {
     const today = window.moment().format("YYYY-MM-DD");
     const yesterday = window.moment().subtract(1, "day").format("YYYY-MM-DD");
     return { today, yesterday };
   });
 }
 
+// Write through Obsidian's vault API so the in-memory file index stays in
+// sync. Returns the TFile path. If the file already exists, overwrite via
+// vault.modify.
 async function writeNote(relPath, content) {
-  const full = path.join(VAULT_PATH, relPath);
-  await fs.mkdir(path.dirname(full), { recursive: true });
-  await fs.writeFile(full, content, "utf8");
+  await browser.executeObsidian(
+    async ({ app }, { relPath, content }) => {
+      const existing = app.vault.getAbstractFileByPath(relPath);
+      if (existing) {
+        await app.vault.modify(existing, content);
+      } else {
+        await app.vault.create(relPath, content);
+      }
+    },
+    { relPath, content }
+  );
 }
 
 async function readNote(relPath) {
-  const full = path.join(VAULT_PATH, relPath);
-  return fs.readFile(full, "utf8");
+  return browser.executeObsidian(
+    async ({ app }, { relPath }) => {
+      const file = app.vault.getAbstractFileByPath(relPath);
+      if (!file) return null;
+      return app.vault.read(file);
+    },
+    { relPath }
+  );
 }
 
-async function deleteIfExists(relPath) {
-  const full = path.join(VAULT_PATH, relPath);
-  try {
-    await fs.unlink(full);
-  } catch (e) {
-    if (e.code !== "ENOENT") throw e;
-  }
+async function deleteAllMarkdown() {
+  await browser.executeObsidian(async ({ app }) => {
+    const md = app.vault.getMarkdownFiles().slice();
+    for (const f of md) {
+      try {
+        await app.vault.delete(f);
+      } catch (e) {
+        // ignore — some sandbox files may be undeletable
+      }
+    }
+  });
 }
 
 // Configure the core Daily Notes plugin from inside Obsidian. We can't write
@@ -60,15 +75,50 @@ async function configureDailyNotes({ folder = "", format = "YYYY-MM-DD" } = {}) 
       if (!dn.enabled) {
         await app.internalPlugins.enablePlugin("daily-notes");
       }
-      // Some Obsidian builds expose options on .instance, others under .options
-      const opts = dn.instance && dn.instance.options ? dn.instance.options : dn;
+      const opts =
+        dn.instance && dn.instance.options ? dn.instance.options : dn;
       opts.folder = folder;
       opts.format = format;
       opts.template = "";
-      // Persist to disk so the plugin reads them
       if (typeof dn.saveData === "function") await dn.saveData();
     },
     { folder, format }
+  );
+}
+
+// Reset plugin settings between tests
+async function resetPluginSettings() {
+  await browser.executeObsidian(async ({ app }) => {
+    const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
+    plugin.settings = {
+      templateHeading: "none",
+      deleteOnComplete: false,
+      removeEmptyTodos: false,
+      rolloverChildren: false,
+      rolloverOnFileCreate: false, // disable auto-rollover during tests
+      doneStatusMarkers: "xX-",
+      leadingNewLine: true,
+      appendBelowExistingTasks: false,
+      skipHorizontalRule: true,
+      skipExistingTodos: false,
+      ignoreBlockquotes: false,
+      skipCompletedChildren: false,
+      rolloverToMatchingSections: false,
+      onRolloverSourceAction: "none",
+      rolloverSourceMarker: ">",
+    };
+    await plugin.saveSettings();
+  });
+}
+
+async function setSettings(patch) {
+  await browser.executeObsidian(
+    async ({ app }, { patch }) => {
+      const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
+      Object.assign(plugin.settings, patch);
+      await plugin.saveSettings();
+    },
+    { patch }
   );
 }
 
@@ -76,24 +126,12 @@ describe("rollover plugin (integrated triage)", function () {
   this.timeout(120000);
 
   before(async function () {
-    await browser.reloadObsidian({ vault: VAULT_PATH });
     await configureDailyNotes();
   });
 
   beforeEach(async function () {
-    // Wipe any .md files left over from prior tests
-    const entries = await fs.readdir(VAULT_PATH, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.isFile() && e.name.endsWith(".md")) {
-        await deleteIfExists(e.name);
-      }
-    }
-    // Force Obsidian to re-scan
-    await browser.executeObsidian(async ({ app }) => {
-      // resyncs the vault — file events fire so the plugin's getLastDailyNote
-      // sees the new state on the next call
-      app.vault.adapter.reconcileFile && app.vault.adapter.reconcileFile();
-    });
+    await deleteAllMarkdown();
+    await resetPluginSettings();
   });
 
   it("plugin is loaded and registered the rollover command", async function () {
@@ -157,12 +195,7 @@ describe("rollover plugin (integrated triage)", function () {
     const todayInitial = "## Tasks\n## Notes\n";
     await writeNote(`${today}.md`, todayInitial);
 
-    // Configure templateHeading via the plugin's settings API
-    await browser.executeObsidian(async ({ app }) => {
-      const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
-      plugin.settings.templateHeading = "## Tasks";
-      await plugin.saveSettings();
-    });
+    await setSettings({ templateHeading: "## Tasks" });
 
     await browser.executeObsidianCommand(ROLLOVER_CMD);
 
@@ -188,12 +221,10 @@ describe("rollover plugin (integrated triage)", function () {
     );
     await writeNote(`${today}.md`, "");
 
-    await browser.executeObsidian(async ({ app }) => {
-      const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
-      plugin.settings.onRolloverSourceAction = "mark";
-      plugin.settings.rolloverSourceMarker = ">";
-      plugin.settings.templateHeading = "none";
-      await plugin.saveSettings();
+    await setSettings({
+      onRolloverSourceAction: "mark",
+      rolloverSourceMarker: ">",
+      templateHeading: "none",
     });
 
     await browser.executeObsidianCommand(ROLLOVER_CMD);
@@ -213,13 +244,7 @@ describe("rollover plugin (integrated triage)", function () {
     );
     await writeNote(`${today}.md`, "- [ ] recurring\n");
 
-    await browser.executeObsidian(async ({ app }) => {
-      const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
-      plugin.settings.skipExistingTodos = true;
-      plugin.settings.templateHeading = "none";
-      plugin.settings.onRolloverSourceAction = "none";
-      await plugin.saveSettings();
-    });
+    await setSettings({ skipExistingTodos: true });
 
     await browser.executeObsidianCommand(ROLLOVER_CMD);
 
@@ -246,13 +271,7 @@ describe("rollover plugin (integrated triage)", function () {
       ["## Plan", "## Habits", "## Notes"].join("\n")
     );
 
-    await browser.executeObsidian(async ({ app }) => {
-      const plugin = app.plugins.getPlugin("obsidian-rollover-daily-todos");
-      plugin.settings.rolloverToMatchingSections = true;
-      plugin.settings.templateHeading = "none";
-      plugin.settings.onRolloverSourceAction = "none";
-      await plugin.saveSettings();
-    });
+    await setSettings({ rolloverToMatchingSections: true });
 
     await browser.executeObsidianCommand(ROLLOVER_CMD);
 
