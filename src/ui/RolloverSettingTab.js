@@ -1,5 +1,6 @@
 import { Setting, PluginSettingTab } from "obsidian";
 import { getDailyNoteSettings } from "obsidian-daily-notes-interface";
+import { resolveSourceAction } from "../source-action";
 
 export default class RolloverSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
@@ -53,18 +54,43 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
 
     new Setting(this.containerEl)
-      .setName("Delete todos from previous day")
+      .setName("After rollover, on yesterday's note")
       .setDesc(
-        `Once todos are found, they are added to Today's Daily Note. If successful, they are deleted from Yesterday's Daily note. Enabling this is destructive and may result in lost data. Keeping this disabled will simply duplicate them from yesterday's note and place them in the appropriate section. Note that currently, duplicate todos will be deleted regardless of what heading they are in, and which heading you choose from above.`
+        `What to do with the rolled todos on the source (yesterday's) side. "Leave them alone" duplicates and is safest. "Mark them" rewrites the checkbox to a custom character (e.g. '>' to indicate "forwarded"). "Delete them" splices them out (legacy 'Delete todos from previous day' behaviour). Today's note is unaffected by this setting.`
       )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.deleteOnComplete || false)
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            none: "Leave them alone (safe default)",
+            mark: "Mark them with a custom character",
+            delete: "Delete them (legacy)",
+          })
+          .setValue(resolveSourceAction(this.plugin.settings))
           .onChange((value) => {
-            this.plugin.settings.deleteOnComplete = value;
+            this.plugin.settings.onRolloverSourceAction = value;
+            // keep the legacy deleteOnComplete in sync so older code paths and
+            // older plugin versions don't behave inconsistently
+            this.plugin.settings.deleteOnComplete = value === "delete";
             this.plugin.saveSettings();
+            this.display();
           })
       );
+
+    if (resolveSourceAction(this.plugin.settings) === "mark") {
+      new Setting(this.containerEl)
+        .setName("Mark character")
+        .setDesc(
+          `Single character (or grapheme) used in place of the original checkbox content on yesterday's note. Common choices: ">" (forwarded), "-" (cancelled), "/" (in progress).`
+        )
+        .addText((text) =>
+          text
+            .setValue(this.plugin.settings.rolloverSourceMarker || ">")
+            .onChange((value) => {
+              this.plugin.settings.rolloverSourceMarker = value || ">";
+              this.plugin.saveSettings();
+            })
+        );
+    }
 
     new Setting(this.containerEl)
       .setName("Remove empty todos in rollover")
