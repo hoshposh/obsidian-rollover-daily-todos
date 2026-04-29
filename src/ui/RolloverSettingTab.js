@@ -143,6 +143,20 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
 
     new Setting(this.containerEl)
+      .setName("Ignore todos in callouts / blockquotes")
+      .setDesc(
+        `When on, todos inside Markdown blockquotes (lines starting with '>') are not rolled over. Useful for habit lists kept inside callouts like '> [!tip]'.`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.ignoreBlockquotes || false)
+          .onChange((value) => {
+            this.plugin.settings.ignoreBlockquotes = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
       .setName("Done status markers")
       .setDesc(
         `Characters that represent done status in checkboxes. Default is "xX-". Add any characters that should be considered as marking a task complete.`

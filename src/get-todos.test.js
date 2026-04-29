@@ -530,6 +530,51 @@ test("does not match bullet patterns embedded mid-line (e.g. inside template lit
   expect(todos).toStrictEqual(["- [ ] this is a real todo"]);
 });
 
+test("(#165) ignoreBlockquotes=false (default): blockquoted bullet lines are not matched as todos because the start-of-line anchor (cluster A) requires a real bullet, not '>'", () => {
+  const lines = [
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> [!tip]",
+    "> - [ ] three (in callout body)",
+  ];
+  const todos = getTodos({ lines });
+  // After cluster A landed, the regex is anchored to `^\s*[*+-]`, so a line
+  // beginning with `>` is rejected at the parser level — independent of the
+  // ignoreBlockquotes setting. ignoreBlockquotes is now defence in depth.
+  expect(todos).toStrictEqual(["- [ ] one"]);
+});
+
+test("(#165) ignoreBlockquotes=true: blockquoted todos are skipped", () => {
+  const lines = [
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> [!tip]",
+    ">  - [ ] three (deeply indented blockquote)",
+    "    > - [ ] four (indented before the >)",
+    "- [ ] five",
+  ];
+  const todos = getTodos({ lines, ignoreBlockquotes: true });
+  expect(todos).toStrictEqual(["- [ ] one", "- [ ] five"]);
+});
+
+test("(#165) ignoreBlockquotes does not affect children walk for non-blockquoted parents", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - some text",
+    "    - [ ] indented child todo",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    ignoreBlockquotes: true,
+  });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - some text",
+    "    - [ ] indented child todo",
+  ]);
+});
+
 test("should not match malformed todos", () => {
   const lines = [
     "- [ ] valid todo",

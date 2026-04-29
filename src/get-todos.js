@@ -11,6 +11,10 @@ class TodoParser {
   // Boolean that encodes whether nested items should be rolled over
   #withChildren;
 
+  // (#165) Boolean: when true, lines whose first non-whitespace char is `>`
+  // (i.e. blockquotes / callouts like `> [!tip]`) are not treated as todos.
+  #ignoreBlockquotes;
+
   // Parse content with segmentation to allow for Unicode grapheme clusters
   #parseIntoChars(content, contentType = "content") {
     // Use Intl.Segmenter to properly split grapheme clusters if available,
@@ -29,9 +33,10 @@ class TodoParser {
     }
   }
 
-  constructor(lines, withChildren, doneStatusMarkers) {
+  constructor(lines, withChildren, doneStatusMarkers, ignoreBlockquotes) {
     this.#lines = lines;
     this.#withChildren = withChildren;
+    this.#ignoreBlockquotes = !!ignoreBlockquotes;
     if (doneStatusMarkers) {
       this.doneStatusMarkers = this.#parseIntoChars(
         doneStatusMarkers,
@@ -42,6 +47,12 @@ class TodoParser {
 
   // Returns true if string s is a todo-item
   #isTodo(s) {
+    // (#165) optionally skip blockquoted / callout lines (those whose first
+    // non-whitespace char is `>`)
+    if (this.#ignoreBlockquotes && /^\s*>/.test(s)) {
+      return false;
+    }
+
     // Extract the checkbox content
     const match = s.match(/^\s*[*+-] \[(.+?)\]/);
     if (!match) return false;
@@ -139,7 +150,13 @@ export const getTodos = ({
   lines,
   withChildren = false,
   doneStatusMarkers = null,
+  ignoreBlockquotes = false,
 }) => {
-  const todoParser = new TodoParser(lines, withChildren, doneStatusMarkers);
+  const todoParser = new TodoParser(
+    lines,
+    withChildren,
+    doneStatusMarkers,
+    ignoreBlockquotes
+  );
   return todoParser.getTodos();
 };
