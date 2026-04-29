@@ -1,6 +1,17 @@
 // Pure helpers for inserting rolled-over todos into today's daily-note content.
 // No Obsidian deps — everything operates on strings.
 
+/**
+ * Returns true if every line in `todos` is present (verbatim) in `content`.
+ * Used as a post-write verification step before the destructive
+ * deleteOnComplete branch runs (see issue #162).
+ */
+export function verifyTodosPresent(content, todos) {
+  if (!todos || todos.length === 0) return true;
+  const lines = new Set(content.split(/\r?\n/));
+  return todos.every((t) => lines.has(t));
+}
+
 const HORIZONTAL_RULE = /^[\s>]*-{3,}\s*$/;
 const LIST_ITEM = /^\s*[*+\-] /;
 
