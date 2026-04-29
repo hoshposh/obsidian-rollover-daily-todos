@@ -1,5 +1,5 @@
 import { Setting, PluginSettingTab } from "obsidian";
-import { getDailyNoteSettings } from "obsidian-daily-notes-interface";
+import { getDailyNoteSettings } from "../daily-notes";
 import { resolveSourceAction } from "../source-action";
 
 export default class RolloverSettingTab extends PluginSettingTab {
@@ -9,49 +9,77 @@ export default class RolloverSettingTab extends PluginSettingTab {
   }
 
   async getTemplateHeadings() {
-    const { template } = getDailyNoteSettings();
-    if (!template) return [];
+    // (#110 / #152) wrap in try/catch — broken template paths or odd Periodic
+    // Notes states must not throw, otherwise the entire settings tab renders
+    // blank with no way to recover.
+    try {
+      const { template } = getDailyNoteSettings(this.app);
+      if (!template) return [];
 
-    let file = this.app.vault.getAbstractFileByPath(template);
+      let file = this.app.vault.getAbstractFileByPath(template);
+      if (file === null) {
+        file = this.app.vault.getAbstractFileByPath(template + ".md");
+      }
+      if (file === null) return [];
 
-    if (file === null) {
-      file = this.app.vault.getAbstractFileByPath(template + ".md");
-    }
-
-    if (file === null) {
-      // file not available, no template-heading can be returned
+      const templateContents = await this.app.vault.read(file);
+      return Array.from(templateContents.matchAll(/#{1,} .*/g)).map(
+        ([heading]) => heading
+      );
+    } catch (err) {
+      console.warn(
+        "rollover-daily-todos: failed to read template headings",
+        err
+      );
       return [];
     }
-
-    const templateContents = await this.app.vault.read(file);
-    const allHeadings = Array.from(templateContents.matchAll(/#{1,} .*/g)).map(
-      ([heading]) => heading
-    );
-    return allHeadings;
   }
 
   async display() {
     const templateHeadings = await this.getTemplateHeadings();
 
     this.containerEl.empty();
-    new Setting(this.containerEl)
-      .setName("Template heading")
-      .setDesc("Which heading from your template should the todos go under")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions({
-            ...templateHeadings.reduce((acc, heading) => {
-              acc[heading] = heading;
-              return acc;
-            }, {}),
-            none: "None",
-          })
-          .setValue(this.plugin?.settings.templateHeading)
-          .onChange((value) => {
-            this.plugin.settings.templateHeading = value;
-            this.plugin.saveSettings();
-          })
-      );
+
+    if (templateHeadings.length > 0) {
+      new Setting(this.containerEl)
+        .setName("Template heading")
+        .setDesc(
+          "Which heading from your template should the todos go under"
+        )
+        .addDropdown((dropdown) =>
+          dropdown
+            .addOptions({
+              ...templateHeadings.reduce((acc, heading) => {
+                acc[heading] = heading;
+                return acc;
+              }, {}),
+              none: "None",
+            })
+            .setValue(this.plugin?.settings.templateHeading)
+            .onChange((value) => {
+              this.plugin.settings.templateHeading = value;
+              this.plugin.saveSettings();
+            })
+        );
+    } else {
+      // (#110 / #152) free-text fallback when no headings could be parsed
+      // from the template. Users with non-resolvable templates or
+      // Periodic-Notes 1.0 setups still need to be able to set a heading.
+      new Setting(this.containerEl)
+        .setName("Template heading")
+        .setDesc(
+          "We couldn't read any headings from your daily-notes template (template path missing or unreadable). Type the exact heading text — including the leading '#' characters — that today's note will contain, e.g. '## Tasks'. Use 'none' to append todos to the end of the note instead."
+        )
+        .addText((text) =>
+          text
+            .setPlaceholder("## Tasks")
+            .setValue(this.plugin?.settings.templateHeading || "none")
+            .onChange((value) => {
+              this.plugin.settings.templateHeading = value || "none";
+              this.plugin.saveSettings();
+            })
+        );
+    }
 
     new Setting(this.containerEl)
       .setName("After rollover, on yesterday's note")
