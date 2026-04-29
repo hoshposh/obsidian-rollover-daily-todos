@@ -61,34 +61,37 @@ By default, the plugin considers checkboxes containing 'x', 'X', or '-' as compl
 
 The plugin supports Unicode characters, including complex emoji and grapheme clusters, in checkbox content. This means you can use emojis or special Unicode characters as status markers and they will be handled correctly.
 
-## Bugs/Issues
+## Compatibility
 
-1. Sometimes you will use this plugin, and your unfinished todos will stay in the same spot. These could be formatting issues.
+Tested against Obsidian **1.12.x** (latest stable, 2026-04). `minAppVersion` in `manifest.json` is `1.4.0`. Mobile (iOS/Android) is supported. Periodic Notes 0.x and 1.0+ (calendar-set rewrite) are both detected and read correctly.
 
-- Regex is used to search for unfinished todos: `/\s*[-*+] \[[^xX-]\].*/g` (or with your custom done markers)
-- At a minimum, they need to look like: `start of line | tabs`-` `[` `]`Your text goes here`
-- If you use spaces instead of tabs at the start of the line, the behavior of the plugin can be inconsistent. Sometimes it'll roll items over, but not delete them from the previous day when you have that option toggled on.
+## Known issues
 
-2. Sometimes, if you trigger the `rollover` function too quickly, it will read the state of a file before the new data was saved to disk. For example, if you add a new incomplete todo to yesterday's daily note, and then quickly run the `Rollover Todos Now` command, it may grab the state of the file a second or two before you ran the command. If this happens, just run the `Undo last rollover` command. Wait a second or two, then try rolling over todos again.
+### Templater conflict (auto-rollover fires before template is applied)
 
-For example (no template heading, empty todos toggled on):
+If your daily-notes template uses [Templater](https://github.com/SilentVoid13/Templater), automatic rollover may fire on file-create *before* Templater has finished processing the template. Symptom: rolled-over todos appear briefly then vanish, or the new note ends up with template placeholders intact and no todos.
 
-```markdown
-You type in:
+**Recommended fix**: invoke the rollover from within your Templater template instead of relying on the file-create hook. Disable "Automatic rollover on daily note open" in this plugin's settings, then add to your daily-notes template:
 
-- [x] Do the dishes
-- [ ] Take out the trash
-
-And then you run the Rollover Todos Now command. Today's daily note might look like:
-
-- [ ] Take out the trash
-
-And the previous day might look like
-
-- [x] Do the dishes
+```js
+<%* await app.commands.executeCommandById("obsidian-rollover-daily-todos:obsidian-rollover-daily-todos-rollover") %>
 ```
 
-3. There are sometimes conflicts with other plugins that deal with new notes -- particularly the Templater plugin. In these situations, your todos may be removed from your previous note, and then not be saved into your new daily note. The simplest remedy is to disable the automatic rollover, and instead trigger it manually.
+Issues #155, #144, #89, #168 are all instances of this conflict.
+
+### Multi-device sync race
+
+If you sync via Obsidian Sync, LiveSync, or `obsidian-git`, the source (yesterday's) note may not yet be synchronised when a new daily note is created on a second device. Symptom: rollover runs but yesterday's todos are missing because that file's not-yet-synced version is empty. Disable automatic rollover and run manually after sync settles. (Issue #140.)
+
+### Tabs vs spaces in indentation (deletion path only)
+
+The `deleteOnComplete` (delete) source action does an *exact-string* match when removing rolled todos from yesterday's note. If your indentation differs even by one whitespace character, the line will not be deleted. Use the new `mark` source action (default in 1.3.0) to avoid this footgun, or normalise your indentation before relying on `delete`.
+
+## Behaviour notes
+
+1. The parser regex (anchored to start of line in 1.3.0) is `/^\s*[-*+] \[[^xX-]\]/` — bullet, space, brackets with non-done content. Customise the "done" set via the **Done status markers** setting (any single grapheme cluster is supported, including emoji).
+
+2. If you trigger `Rollover Todos Now` too quickly after editing yesterday's note, Obsidian may not have flushed the file yet. Run `Undo last rollover` (which now persists across restart) and retry after a second.
 
 ## Installation
 
