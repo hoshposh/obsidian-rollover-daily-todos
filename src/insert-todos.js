@@ -1,0 +1,124 @@
+// Pure helpers for inserting rolled-over todos into today's daily-note content.
+// No Obsidian deps — everything operates on strings.
+
+const HORIZONTAL_RULE = /^[\s>]*-{3,}\s*$/;
+const LIST_ITEM = /^\s*[*+\-] /;
+
+function appendToEnd(content, todos) {
+  let result = content;
+  // (#115) ensure trailing newline before the rolled block so the last
+  // existing line isn't merged with the first rolled todo
+  if (result.length > 0 && !result.endsWith("\n")) result += "\n";
+  result += todos.join("\n");
+  // (#115) ensure trailing newline after so subsequent typing doesn't
+  // extend the last rolled todo line
+  if (!result.endsWith("\n")) result += "\n";
+  return result;
+}
+
+function insertUnderHeading(lines, heading, todos, opts) {
+  const idx = lines.findIndex((l) => l === heading);
+  if (idx === -1) return null;
+
+  let insertAt = idx + 1;
+
+  // (#101) skip a horizontal-rule line if one immediately follows the heading,
+  // so todos are placed below the rule rather than between heading and rule
+  if (
+    opts.skipHorizontalRule &&
+    insertAt < lines.length &&
+    HORIZONTAL_RULE.test(lines[insertAt])
+  ) {
+    insertAt++;
+  }
+
+  // (#132) when requested, walk past any existing list under the heading and
+  // append the new todos at the end of that list (rather than directly below
+  // the heading)
+  let placedBelowExistingList = false;
+  if (opts.appendBelowExistingTasks) {
+    let walk = insertAt;
+    let sawList = false;
+    while (walk < lines.length) {
+      const l = lines[walk];
+      if (LIST_ITEM.test(l)) {
+        sawList = true;
+        walk++;
+      } else if (l.trim() === "" && sawList) {
+        // a blank line *between* list items still counts as part of the list
+        // run; only break out if we hit a non-list, non-blank line afterwards
+        const next = lines[walk + 1];
+        if (next !== undefined && LIST_ITEM.test(next)) {
+          walk++;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+    if (sawList) {
+      insertAt = walk;
+      placedBelowExistingList = true;
+    }
+  }
+
+  const newLines = lines.slice();
+  // when extending an existing list (#132) we want a clean continuation, no
+  // leading blank line; otherwise honour the leadingNewLine setting
+  const block =
+    opts.leadingNewLine && !placedBelowExistingList ? ["", ...todos] : todos;
+  newLines.splice(insertAt, 0, ...block);
+  return newLines.join("\n");
+}
+
+/**
+ * Returns the new content for today's daily note after inserting `todos`.
+ *
+ * @param {object} args
+ * @param {string} args.dailyNoteContent
+ * @param {string[]} args.todos
+ * @param {string} [args.templateHeading="none"] heading text (e.g. "## Tasks") or "none"
+ * @param {boolean} [args.leadingNewLine=true] add blank line between heading and todos
+ * @param {boolean} [args.appendBelowExistingTasks=false] place todos at the end of the existing list under the heading (#132)
+ * @param {boolean} [args.skipHorizontalRule=true] place todos below a `---` rule that follows the heading (#101)
+ * @returns {{ content: string, templateHeadingFound: boolean, todosInserted: number }}
+ */
+export function buildNewDailyNoteContent({
+  dailyNoteContent,
+  todos,
+  templateHeading = "none",
+  leadingNewLine = true,
+  appendBelowExistingTasks = false,
+  skipHorizontalRule = true,
+}) {
+  if (!todos || todos.length === 0) {
+    return {
+      content: dailyNoteContent,
+      templateHeadingFound: false,
+      todosInserted: 0,
+    };
+  }
+
+  if (templateHeading && templateHeading !== "none") {
+    const lines = dailyNoteContent.split("\n");
+    const newContent = insertUnderHeading(lines, templateHeading, todos, {
+      leadingNewLine,
+      appendBelowExistingTasks,
+      skipHorizontalRule,
+    });
+    if (newContent !== null) {
+      return {
+        content: newContent,
+        templateHeadingFound: true,
+        todosInserted: todos.length,
+      };
+    }
+  }
+
+  return {
+    content: appendToEnd(dailyNoteContent, todos),
+    templateHeadingFound: false,
+    todosInserted: todos.length,
+  };
+}

@@ -7,6 +7,7 @@ import {
 import UndoModal from "./ui/UndoModal";
 import RolloverSettingTab from "./ui/RolloverSettingTab";
 import { getTodos } from "./get-todos";
+import { buildNewDailyNoteContent } from "./insert-todos";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
@@ -48,6 +49,8 @@ export default class RolloverTodosPlugin extends Plugin {
       rolloverOnFileCreate: true,
       doneStatusMarkers: "xX-",
       leadingNewLine: true,
+      appendBelowExistingTasks: false,
+      skipHorizontalRule: true,
     };
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -198,8 +201,14 @@ export default class RolloverTodosPlugin extends Plugin {
         10000
       );
     } else {
-      const { templateHeading, deleteOnComplete, removeEmptyTodos, leadingNewLine } =
-        this.settings;
+      const {
+        templateHeading,
+        deleteOnComplete,
+        removeEmptyTodos,
+        leadingNewLine,
+        appendBelowExistingTasks,
+        skipHorizontalRule,
+      } = this.settings;
 
       // check if there is a daily note from yesterday
       const lastDailyNote = this.getLastDailyNote();
@@ -254,35 +263,27 @@ export default class RolloverTodosPlugin extends Plugin {
       const templateHeadingSelected = templateHeading !== "none";
 
       if (todos_today.length > 0) {
-        let dailyNoteContent = await this.app.vault.read(file);
+        const dailyNoteContent = await this.app.vault.read(file);
         undoHistoryInstance.today = {
           file: file,
           oldContent: `${dailyNoteContent}`,
         };
-        const todos_todayString = `\n${todos_today.join("\n")}`;
 
-        // If template heading is selected, try to rollover to template heading
-        if (templateHeadingSelected) {
-          const contentAddedToHeading = dailyNoteContent.replace(
+        const { content: newContent, templateHeadingFound } =
+          buildNewDailyNoteContent({
+            dailyNoteContent,
+            todos: todos_today,
             templateHeading,
-            `${templateHeading}${leadingNewLine ? '\n' : ''}${todos_todayString}`
-          );
-          if (contentAddedToHeading == dailyNoteContent) {
-            templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily not. Rolling todos to end of file.`;
-          } else {
-            dailyNoteContent = contentAddedToHeading;
-          }
+            leadingNewLine,
+            appendBelowExistingTasks,
+            skipHorizontalRule,
+          });
+
+        if (templateHeadingSelected && !templateHeadingFound) {
+          templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily not. Rolling todos to end of file.`;
         }
 
-        // Rollover to bottom of file if no heading found in file, or no heading selected
-        if (
-          !templateHeadingSelected ||
-          templateHeadingNotFoundMessage.length > 0
-        ) {
-          dailyNoteContent += todos_todayString;
-        }
-
-        await this.app.vault.modify(file, dailyNoteContent);
+        await this.app.vault.modify(file, newContent);
       }
 
       // if deleteOnComplete, get yesterday's content and modify it

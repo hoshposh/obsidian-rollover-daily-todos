@@ -132,17 +132,50 @@ export default class RolloverSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName("Add extra blank line between Heading and Todos")
       .setDesc(`Whether to add an extra blank line between the selected Heading and the rolled over todos. This will only work in combination with a configured Template Heading.`)
-      .addToggle((toggle) => 
+      .addToggle((toggle) =>
         toggle
           .setValue(
             this.plugin.settings
-              .leadingNewLine === undefined || 
-              this.plugin.settings.leadingNewLine === null 
-              ? true 
+              .leadingNewLine === undefined ||
+              this.plugin.settings.leadingNewLine === null
+              ? true
               : this.plugin.settings.leadingNewLine
           )
           .onChange((value) => {
             this.plugin.settings.leadingNewLine = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
+      .setName("Append below existing tasks")
+      .setDesc(
+        `When today's note already has tasks under the chosen heading, place rolled-over tasks at the end of that list (rather than directly under the heading).`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.appendBelowExistingTasks || false)
+          .onChange((value) => {
+            this.plugin.settings.appendBelowExistingTasks = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
+      .setName("Place todos below a horizontal rule")
+      .setDesc(
+        `If your template has '---' immediately under the chosen heading, place rolled-over todos below the rule rather than between heading and rule.`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(
+            this.plugin.settings.skipHorizontalRule === undefined ||
+              this.plugin.settings.skipHorizontalRule === null
+              ? true
+              : this.plugin.settings.skipHorizontalRule
+          )
+          .onChange((value) => {
+            this.plugin.settings.skipHorizontalRule = value;
             this.plugin.saveSettings();
           })
       );
