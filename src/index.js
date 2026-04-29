@@ -12,6 +12,7 @@ import {
   getTodosBySection,
   buildSectionRoutedContent,
 } from "./section-routing";
+import { applySourceAction, resolveSourceAction } from "./source-action";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
@@ -59,6 +60,12 @@ export default class RolloverTodosPlugin extends Plugin {
       // (#143/#68/#54/#126/#150/#37/#33/#164) parse yesterday into per-heading
       // buckets and route each bucket to the matching heading on today's side
       rolloverToMatchingSections: false,
+      // (#153/#48/#106/#128/#142) tri-state replacement for deleteOnComplete:
+      //   "none"   — leave yesterday's note untouched (safest default)
+      //   "delete" — splice rolled lines out of yesterday's note (legacy)
+      //   "mark"   — rewrite checkbox content on yesterday's side
+      onRolloverSourceAction: "none",
+      rolloverSourceMarker: ">",
     };
     const stored = (await this.loadData()) || {};
     // (#162) recover any persisted undo state so undo survives Obsidian restart
@@ -236,14 +243,18 @@ export default class RolloverTodosPlugin extends Plugin {
     } else {
       const {
         templateHeading,
-        deleteOnComplete,
         removeEmptyTodos,
         leadingNewLine,
         appendBelowExistingTasks,
         skipHorizontalRule,
         skipExistingTodos,
         rolloverToMatchingSections,
+        rolloverSourceMarker,
       } = this.settings;
+      const sourceAction = resolveSourceAction(this.settings);
+      // legacy: a deleteOnComplete=true checkbox in the UI still surfaces the
+      // "deleted N empty todos" message text below
+      const deleteOnComplete = sourceAction === "delete";
 
       // check if there is a daily note from yesterday
       const lastDailyNote = this.getLastDailyNote();
@@ -366,23 +377,25 @@ export default class RolloverTodosPlugin extends Plugin {
         }
       }
 
-      // if deleteOnComplete, get yesterday's content and modify it
-      if (deleteOnComplete && insertionVerified) {
-        let lastDailyNoteContent = await this.app.vault.read(lastDailyNote);
+      // (#153/#48/#106/#128/#142) apply the configured source action
+      // ("delete" | "mark" | "none") to yesterday's note. The verification
+      // guard from #162 still applies: never modify the source if the
+      // destination write didn't take.
+      if (sourceAction !== "none" && insertionVerified) {
+        const lastDailyNoteContent = await this.app.vault.read(lastDailyNote);
         undoHistoryInstance.previousDay = {
           file: lastDailyNote,
           oldContent: `${lastDailyNoteContent}`,
         };
-        let lines = lastDailyNoteContent.split("\n");
-
-        for (let i = lines.length; i >= 0; i--) {
-          if (todos_yesterday.includes(lines[i])) {
-            lines.splice(i, 1);
-          }
+        const { content: modifiedContent, changed } = applySourceAction({
+          content: lastDailyNoteContent,
+          todos: todos_yesterday,
+          action: sourceAction,
+          marker: rolloverSourceMarker,
+        });
+        if (changed) {
+          await this.app.vault.modify(lastDailyNote, modifiedContent);
         }
-
-        const modifiedContent = lines.join("\n");
-        await this.app.vault.modify(lastDailyNote, modifiedContent);
       }
 
       // Let user know rollover has been successful with X todos
