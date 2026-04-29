@@ -8,6 +8,10 @@ import UndoModal from "./ui/UndoModal";
 import RolloverSettingTab from "./ui/RolloverSettingTab";
 import { getTodos } from "./get-todos";
 import { buildNewDailyNoteContent } from "./insert-todos";
+import {
+  getTodosBySection,
+  buildSectionRoutedContent,
+} from "./section-routing";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
@@ -52,6 +56,9 @@ export default class RolloverTodosPlugin extends Plugin {
       appendBelowExistingTasks: false,
       skipHorizontalRule: true,
       skipExistingTodos: false,
+      // (#143/#68/#54/#126/#150/#37/#33/#164) parse yesterday into per-heading
+      // buckets and route each bucket to the matching heading on today's side
+      rolloverToMatchingSections: false,
     };
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -210,6 +217,7 @@ export default class RolloverTodosPlugin extends Plugin {
         appendBelowExistingTasks,
         skipHorizontalRule,
         skipExistingTodos,
+        rolloverToMatchingSections,
       } = this.settings;
 
       // check if there is a daily note from yesterday
@@ -271,8 +279,31 @@ export default class RolloverTodosPlugin extends Plugin {
           oldContent: `${dailyNoteContent}`,
         };
 
-        const { content: newContent, templateHeadingFound } =
-          buildNewDailyNoteContent({
+        let newContent;
+        let templateHeadingFound = true;
+
+        if (rolloverToMatchingSections) {
+          // (cluster C) re-parse yesterday into per-heading buckets and route
+          // each bucket to its matching heading on today's side
+          const yesterdayContent = await this.app.vault.read(lastDailyNote);
+          const yesterdayLines = yesterdayContent.split(/\r?\n/);
+          const todosBySection = getTodosBySection({
+            lines: yesterdayLines,
+            withChildren: this.settings.rolloverChildren,
+            doneStatusMarkers: this.settings.doneStatusMarkers,
+          });
+          const result = buildSectionRoutedContent({
+            dailyNoteContent,
+            todosBySection,
+            fallbackHeading: templateHeading,
+            leadingNewLine,
+            appendBelowExistingTasks,
+            skipHorizontalRule,
+            skipExistingTodos,
+          });
+          newContent = result.content;
+        } else {
+          const result = buildNewDailyNoteContent({
             dailyNoteContent,
             todos: todos_today,
             templateHeading,
@@ -281,8 +312,15 @@ export default class RolloverTodosPlugin extends Plugin {
             skipHorizontalRule,
             skipExistingTodos,
           });
+          newContent = result.content;
+          templateHeadingFound = result.templateHeadingFound;
+        }
 
-        if (templateHeadingSelected && !templateHeadingFound) {
+        if (
+          !rolloverToMatchingSections &&
+          templateHeadingSelected &&
+          !templateHeadingFound
+        ) {
           templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily not. Rolling todos to end of file.`;
         }
 

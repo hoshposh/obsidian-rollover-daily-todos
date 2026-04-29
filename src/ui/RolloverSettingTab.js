@@ -162,6 +162,20 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
 
     new Setting(this.containerEl)
+      .setName("Roll over to matching sections")
+      .setDesc(
+        `Group todos by their heading on yesterday's note and route each group to the same-named heading on today's note (case-insensitive, level-agnostic). Unmatched groups fall back to the configured Template Heading (or end of file). Closes #143/#68/#37/#33.`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.rolloverToMatchingSections || false)
+          .onChange((value) => {
+            this.plugin.settings.rolloverToMatchingSections = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
       .setName("Skip todos already present today")
       .setDesc(
         `Don't roll over todos whose text already appears in today's note (useful when your daily template bakes in recurring tasks). Comparison is whitespace-trimmed and exact.`
