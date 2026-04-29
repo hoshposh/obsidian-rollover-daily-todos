@@ -95,6 +95,20 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
 
     new Setting(this.containerEl)
+      .setName("Skip completed children")
+      .setDesc(
+        `When 'Roll over children of todos' is on, drop child todos that are already completed (and their descendants). Non-todo nested content still rolls over.`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.skipCompletedChildren || false)
+          .onChange((value) => {
+            this.plugin.settings.skipCompletedChildren = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
       .setName("Automatic rollover on daily note open")
       .setDesc(
         `If enabled, the plugin will automatically rollover todos when you open a daily note.`

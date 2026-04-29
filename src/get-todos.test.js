@@ -516,6 +516,70 @@ test("get todos supports custom status marker edge cases (inclusion)", () => {
   expect(todos).toStrictEqual(result);
 });
 
+test("(#125) skipCompletedChildren=false (default): completed todo children are still rolled with parent", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({ lines, withChildren: true });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - [ ] open child",
+  ]);
+});
+
+test("(#125) skipCompletedChildren=true: completed todo children are dropped, non-todo children remain", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "    - some note",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+  });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - some note",
+    "    - [ ] open child",
+  ]);
+});
+
+test("(#125) skipCompletedChildren=true: also drops descendants of a completed child", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [x] done child",
+    "        - [ ] grandchild that would otherwise survive",
+    "        - sub-note",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+  });
+  expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
+});
+
+test("(#125) respects custom done markers", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - [✅] done with custom marker",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+    doneStatusMarkers: "✅",
+  });
+  expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
+});
+
 test("should not match malformed todos", () => {
   const lines = [
     "- [ ] valid todo",

@@ -11,6 +11,11 @@ class TodoParser {
   // Boolean that encodes whether nested items should be rolled over
   #withChildren;
 
+  // (#125) When true, completed-todo children (and their descendants) are
+  // dropped during the children walk. Non-todo children (text/sub-bullets)
+  // are unaffected. Only meaningful when #withChildren is true.
+  #skipCompletedChildren;
+
   // Parse content with segmentation to allow for Unicode grapheme clusters
   #parseIntoChars(content, contentType = "content") {
     // Use Intl.Segmenter to properly split grapheme clusters if available,
@@ -29,15 +34,26 @@ class TodoParser {
     }
   }
 
-  constructor(lines, withChildren, doneStatusMarkers) {
+  constructor(lines, withChildren, doneStatusMarkers, skipCompletedChildren) {
     this.#lines = lines;
     this.#withChildren = withChildren;
+    this.#skipCompletedChildren = !!skipCompletedChildren;
     if (doneStatusMarkers) {
       this.doneStatusMarkers = this.#parseIntoChars(
         doneStatusMarkers,
         "done status markers"
       );
     }
+  }
+
+  // Returns true if the line is a checkbox whose content is a done marker.
+  // (Distinct from #isTodo which is true only for *incomplete* todos.)
+  #isDoneTodo(s) {
+    const match = s.match(/\s*[*+-] \[(.+?)\]/);
+    if (!match) return false;
+    const contentChars = this.#parseIntoChars(match[1], "checkbox content");
+    if (contentChars.length !== 1) return false;
+    return contentChars.some((c) => this.doneStatusMarkers.includes(c));
   }
 
   // Returns true if string s is a todo-item
@@ -92,15 +108,31 @@ class TodoParser {
     return false;
   }
 
-  // Returns a list of strings that are the nested items after line `parentLinum`
+  // Returns { children, consumed } — children is the list of nested items to
+  // include after line `parentLinum`; consumed is the number of source lines
+  // actually walked (which can exceed children.length when skipping).
   #getChildren(parentLinum) {
     const children = [];
     let nextLinum = parentLinum + 1;
     while (this.#isChildOf(parentLinum, nextLinum)) {
-      children.push(this.#lines[nextLinum]);
+      const line = this.#lines[nextLinum];
+      if (this.#skipCompletedChildren && this.#isDoneTodo(line)) {
+        // (#125) drop this completed child *and its descendants* — if a parent
+        // task is done, its sub-tasks are implicitly done too
+        const completedChildIndent = this.#getIndentation(nextLinum);
+        nextLinum++;
+        while (
+          nextLinum < this.#lines.length &&
+          this.#getIndentation(nextLinum) > completedChildIndent
+        ) {
+          nextLinum++;
+        }
+        continue;
+      }
+      children.push(line);
       nextLinum++;
     }
-    return children;
+    return { children, consumed: nextLinum - parentLinum - 1 };
   }
 
   // Returns true if line `linum` has more indentation than line `parentLinum`
@@ -124,9 +156,9 @@ class TodoParser {
       if (this.#isTodo(line)) {
         todos.push(line);
         if (this.#withChildren && this.#hasChildren(l)) {
-          const cs = this.#getChildren(l);
-          todos = [...todos, ...cs];
-          l += cs.length;
+          const { children, consumed } = this.#getChildren(l);
+          todos = [...todos, ...children];
+          l += consumed;
         }
       }
     }
@@ -139,7 +171,13 @@ export const getTodos = ({
   lines,
   withChildren = false,
   doneStatusMarkers = null,
+  skipCompletedChildren = false,
 }) => {
-  const todoParser = new TodoParser(lines, withChildren, doneStatusMarkers);
+  const todoParser = new TodoParser(
+    lines,
+    withChildren,
+    doneStatusMarkers,
+    skipCompletedChildren
+  );
   return todoParser.getTodos();
 };
