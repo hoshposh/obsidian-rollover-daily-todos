@@ -18,3 +18,11 @@ data.json
 
 # local developer scripts
 deployLocally.js
+.obsidian-cache
+
+
+CLAUDE.md
+
+# triage docs (local working notes — not committed)
+TRIAGE.md
+.triage/

@@ -7,6 +7,7 @@
     "dev": "rollup -c -w",
     "build": "rollup -c --environment BUILD:production",
     "test": "vitest",
+    "test:e2e": "pnpm build && wdio run ./wdio.conf.mjs",
     "format": "prettier --write ."
   },
   "cspell": {
@@ -20,10 +21,19 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^15.1.0",
     "@rollup/plugin-node-resolve": "^9.0.0",
-    "obsidian": "https://github.com/obsidianmd/obsidian-api/tarball/master",
+    "@wdio/cli": "latest",
+    "@wdio/globals": "latest",
+    "@wdio/local-runner": "latest",
+    "@wdio/mocha-framework": "latest",
+    "@wdio/spec-reporter": "latest",
+    "mocha": "latest",
+    "obsidian": "https://github.com/obsidianmd/obsidian-api/tarball/3a2161f",
+    "obsidian-launcher": "^2.1.2",
     "prettier": "^2.8.1",
     "rollup": "^2.32.1",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "wdio-obsidian-reporter": "^2.0.2",
+    "wdio-obsidian-service": "^2.0.2"
   },
   "dependencies": {
     "obsidian-daily-notes-interface": "^0.9.2"
