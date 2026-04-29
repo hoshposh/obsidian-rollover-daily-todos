@@ -516,6 +516,52 @@ test("get todos supports custom status marker edge cases (inclusion)", () => {
   expect(todos).toStrictEqual(result);
 });
 
+test("(#165) ignoreBlockquotes=false (default): blockquoted todos are still extracted", () => {
+  const lines = [
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> [!tip]",
+    "> - [ ] three (in callout body)",
+  ];
+  const todos = getTodos({ lines });
+  expect(todos).toStrictEqual([
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> - [ ] three (in callout body)",
+  ]);
+});
+
+test("(#165) ignoreBlockquotes=true: blockquoted todos are skipped", () => {
+  const lines = [
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> [!tip]",
+    ">  - [ ] three (deeply indented blockquote)",
+    "    > - [ ] four (indented before the >)",
+    "- [ ] five",
+  ];
+  const todos = getTodos({ lines, ignoreBlockquotes: true });
+  expect(todos).toStrictEqual(["- [ ] one", "- [ ] five"]);
+});
+
+test("(#165) ignoreBlockquotes does not affect children walk for non-blockquoted parents", () => {
+  const lines = [
+    "- [ ] parent",
+    "    - some text",
+    "    - [ ] indented child todo",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    ignoreBlockquotes: true,
+  });
+  expect(todos).toStrictEqual([
+    "- [ ] parent",
+    "    - some text",
+    "    - [ ] indented child todo",
+  ]);
+});
+
 test("should not match malformed todos", () => {
   const lines = [
     "- [ ] valid todo",
