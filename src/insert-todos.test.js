@@ -1,5 +1,5 @@
 import { expect, test, describe } from "vitest";
-import { buildNewDailyNoteContent } from "./insert-todos";
+import { buildNewDailyNoteContent, verifyTodosPresent } from "./insert-todos";
 
 const todos = ["- [ ] one", "- [ ] two"];
 
@@ -106,6 +106,33 @@ describe("(#101) horizontal-rule handling", () => {
       leadingNewLine: false,
     });
     expect(content).toBe("## Foo\n- [ ] one\n- [ ] two\n--\nbar");
+  });
+});
+
+describe("(#162) verifyTodosPresent — guard for the deletion path", () => {
+  test("returns true when every todo line is present in content", () => {
+    const content = "preamble\n- [ ] one\n- [ ] two\nepilogue";
+    expect(verifyTodosPresent(content, ["- [ ] one", "- [ ] two"])).toBe(true);
+  });
+
+  test("returns false when any todo line is missing", () => {
+    const content = "preamble\n- [ ] one\nepilogue";
+    expect(verifyTodosPresent(content, ["- [ ] one", "- [ ] two"])).toBe(false);
+  });
+
+  test("returns true for an empty todo list (nothing to verify)", () => {
+    expect(verifyTodosPresent("anything", [])).toBe(true);
+    expect(verifyTodosPresent("anything", null)).toBe(true);
+  });
+
+  test("handles CRLF line endings", () => {
+    const content = "a\r\n- [ ] x\r\nb";
+    expect(verifyTodosPresent(content, ["- [ ] x"])).toBe(true);
+  });
+
+  test("requires verbatim line match — partial match is not enough", () => {
+    const content = "- [ ] one and a half";
+    expect(verifyTodosPresent(content, ["- [ ] one"])).toBe(false);
   });
 });
 

@@ -7,7 +7,7 @@ import {
 import UndoModal from "./ui/UndoModal";
 import RolloverSettingTab from "./ui/RolloverSettingTab";
 import { getTodos } from "./get-todos";
-import { buildNewDailyNoteContent } from "./insert-todos";
+import { buildNewDailyNoteContent, verifyTodosPresent } from "./insert-todos";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
@@ -52,11 +52,36 @@ export default class RolloverTodosPlugin extends Plugin {
       appendBelowExistingTasks: false,
       skipHorizontalRule: true,
     };
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const stored = (await this.loadData()) || {};
+    // (#162) recover any persisted undo state so undo survives Obsidian restart
+    this._persistedUndo = stored._undo || null;
+    const { _undo, ...settings } = stored;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData({ ...this.settings, _undo: this._persistedUndo || null });
+  }
+
+  // (#162) persist the latest undo state so it survives plugin reload/restart.
+  // Files are referenced by path; restoreUndoFiles() resolves them at undo time.
+  async persistUndo(instance) {
+    this._persistedUndo = {
+      time: new Date().toISOString(),
+      today: instance.today.file
+        ? {
+            path: instance.today.file.path,
+            oldContent: instance.today.oldContent,
+          }
+        : null,
+      previousDay: instance.previousDay.file
+        ? {
+            path: instance.previousDay.file.path,
+            oldContent: instance.previousDay.oldContent,
+          }
+        : null,
+    };
+    await this.saveSettings();
   }
 
   isDailyNotesEnabled() {
@@ -261,6 +286,7 @@ export default class RolloverTodosPlugin extends Plugin {
       // get today's content and modify it
       let templateHeadingNotFoundMessage = "";
       const templateHeadingSelected = templateHeading !== "none";
+      let insertionVerified = todos_today.length === 0;
 
       if (todos_today.length > 0) {
         const dailyNoteContent = await this.app.vault.read(file);
@@ -284,10 +310,23 @@ export default class RolloverTodosPlugin extends Plugin {
         }
 
         await this.app.vault.modify(file, newContent);
+
+        // (#162) verify today's note actually received the rolled todos before
+        // we permit the destructive deleteOnComplete branch to run. If another
+        // plugin (Templater, sync) rewrote the file between our modify and now,
+        // the rolled lines won't be present and we'd otherwise lose them.
+        const verifyContent = await this.app.vault.read(file);
+        insertionVerified = verifyTodosPresent(verifyContent, todos_today);
+        if (!insertionVerified) {
+          new Notice(
+            "Rollover aborted: could not verify that today's note received the rolled todos. Yesterday's note was left unchanged. (Likely cause: another plugin overwrote today's note. See README.)",
+            10000
+          );
+        }
       }
 
       // if deleteOnComplete, get yesterday's content and modify it
-      if (deleteOnComplete) {
+      if (deleteOnComplete && insertionVerified) {
         let lastDailyNoteContent = await this.app.vault.read(lastDailyNote);
         undoHistoryInstance.previousDay = {
           file: lastDailyNote,
@@ -343,6 +382,8 @@ export default class RolloverTodosPlugin extends Plugin {
       }
       this.undoHistoryTime = new Date();
       this.undoHistory = [undoHistoryInstance];
+      // (#162) persist for cross-restart undo (best-effort; ignore errors)
+      this.persistUndo(undoHistoryInstance).catch(() => {});
     }
   }
 
@@ -350,6 +391,34 @@ export default class RolloverTodosPlugin extends Plugin {
     await this.loadSettings();
     this.undoHistory = [];
     this.undoHistoryTime = new Date();
+
+    // (#162) restore in-memory undo from disk if it's still within the 2-minute
+    // window. Files are resolved lazily inside the undo callback because the
+    // vault API isn't fully ready until layout-ready.
+    this.app.workspace.onLayoutReady(() => {
+      const persisted = this._persistedUndo;
+      if (!persisted || !persisted.time) return;
+      const ageMs = Date.now() - new Date(persisted.time).getTime();
+      if (ageMs > 2 * 60 * 1000) {
+        this._persistedUndo = null;
+        this.saveSettings().catch(() => {});
+        return;
+      }
+      const resolve = (slot) => {
+        if (!slot) return { file: undefined, oldContent: "" };
+        const file = this.app.vault.getAbstractFileByPath(slot.path);
+        return file
+          ? { file, oldContent: slot.oldContent }
+          : { file: undefined, oldContent: "" };
+      };
+      this.undoHistory = [
+        {
+          today: resolve(persisted.today),
+          previousDay: resolve(persisted.previousDay),
+        },
+      ];
+      this.undoHistoryTime = new Date(persisted.time);
+    });
 
     this.addSettingTab(new RolloverSettingTab(this.app, this));
 
