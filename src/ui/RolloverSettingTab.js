@@ -162,6 +162,20 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
 
     new Setting(this.containerEl)
+      .setName("Skip todos already present today")
+      .setDesc(
+        `Don't roll over todos whose text already appears in today's note (useful when your daily template bakes in recurring tasks). Comparison is whitespace-trimmed and exact.`
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.skipExistingTodos || false)
+          .onChange((value) => {
+            this.plugin.settings.skipExistingTodos = value;
+            this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(this.containerEl)
       .setName("Place todos below a horizontal rule")
       .setDesc(
         `If your template has '---' immediately under the chosen heading, place rolled-over todos below the rule rather than between heading and rule.`

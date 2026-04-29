@@ -150,6 +150,53 @@ describe("(#132) append below existing tasks", () => {
     expect(content).toBe("## Foo\n\n- [ ] one\n- [ ] two\nplain text");
   });
 
+  test("(#130) skipExistingTodos drops todos whose text already exists in today's note", () => {
+    const dailyNoteContent = [
+      "## Foo",
+      "- [ ] one", // already there
+      "",
+      "other",
+    ].join("\n");
+
+    const result = buildNewDailyNoteContent({
+      dailyNoteContent,
+      todos: ["- [ ] one", "- [ ] two"],
+      templateHeading: "## Foo",
+      skipExistingTodos: true,
+      appendBelowExistingTasks: true,
+    });
+
+    expect(result.todosSkipped).toBe(1);
+    expect(result.todosInserted).toBe(1);
+    expect(result.content).toBe(
+      ["## Foo", "- [ ] one", "- [ ] two", "", "other"].join("\n")
+    );
+  });
+
+  test("(#130) skipExistingTodos compares trimmed lines (whitespace tolerant)", () => {
+    const result = buildNewDailyNoteContent({
+      dailyNoteContent: "    - [ ] one  \nother",
+      todos: ["- [ ] one"],
+      templateHeading: "none",
+      skipExistingTodos: true,
+    });
+    expect(result.todosSkipped).toBe(1);
+    expect(result.todosInserted).toBe(0);
+    expect(result.content).toBe("    - [ ] one  \nother");
+  });
+
+  test("(#130) skipExistingTodos disabled — duplicates are inserted (back-compat)", () => {
+    const result = buildNewDailyNoteContent({
+      dailyNoteContent: "- [ ] one\n",
+      todos: ["- [ ] one"],
+      templateHeading: "none",
+      skipExistingTodos: false,
+    });
+    expect(result.todosSkipped).toBe(0);
+    expect(result.todosInserted).toBe(1);
+    expect(result.content).toBe("- [ ] one\n- [ ] one\n");
+  });
+
   test("works in combination with horizontal-rule skipping", () => {
     const dailyNoteContent = [
       "## Foo",

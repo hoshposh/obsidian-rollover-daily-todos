@@ -72,6 +72,14 @@ function insertUnderHeading(lines, heading, todos, opts) {
   return newLines.join("\n");
 }
 
+// (#130) drop todos whose trimmed body already appears in the target content
+function dedupAgainstExisting(todos, existingContent) {
+  const existingLines = new Set(
+    existingContent.split("\n").map((l) => l.trim())
+  );
+  return todos.filter((t) => !existingLines.has(t.trim()));
+}
+
 /**
  * Returns the new content for today's daily note after inserting `todos`.
  *
@@ -82,7 +90,8 @@ function insertUnderHeading(lines, heading, todos, opts) {
  * @param {boolean} [args.leadingNewLine=true] add blank line between heading and todos
  * @param {boolean} [args.appendBelowExistingTasks=false] place todos at the end of the existing list under the heading (#132)
  * @param {boolean} [args.skipHorizontalRule=true] place todos below a `---` rule that follows the heading (#101)
- * @returns {{ content: string, templateHeadingFound: boolean, todosInserted: number }}
+ * @param {boolean} [args.skipExistingTodos=false] drop todos whose trimmed text already appears in today's note (#130)
+ * @returns {{ content: string, templateHeadingFound: boolean, todosInserted: number, todosSkipped: number }}
  */
 export function buildNewDailyNoteContent({
   dailyNoteContent,
@@ -91,12 +100,20 @@ export function buildNewDailyNoteContent({
   leadingNewLine = true,
   appendBelowExistingTasks = false,
   skipHorizontalRule = true,
+  skipExistingTodos = false,
 }) {
+  const originalCount = todos ? todos.length : 0;
+  if (skipExistingTodos && todos && todos.length > 0) {
+    todos = dedupAgainstExisting(todos, dailyNoteContent);
+  }
+  const todosSkipped = originalCount - (todos ? todos.length : 0);
+
   if (!todos || todos.length === 0) {
     return {
       content: dailyNoteContent,
       templateHeadingFound: false,
       todosInserted: 0,
+      todosSkipped,
     };
   }
 
@@ -112,6 +129,7 @@ export function buildNewDailyNoteContent({
         content: newContent,
         templateHeadingFound: true,
         todosInserted: todos.length,
+        todosSkipped,
       };
     }
   }
@@ -120,5 +138,6 @@ export function buildNewDailyNoteContent({
     content: appendToEnd(dailyNoteContent, todos),
     templateHeadingFound: false,
     todosInserted: todos.length,
+    todosSkipped,
   };
 }

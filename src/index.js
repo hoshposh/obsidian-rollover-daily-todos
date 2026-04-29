@@ -51,6 +51,7 @@ export default class RolloverTodosPlugin extends Plugin {
       leadingNewLine: true,
       appendBelowExistingTasks: false,
       skipHorizontalRule: true,
+      skipExistingTodos: false,
     };
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -208,6 +209,7 @@ export default class RolloverTodosPlugin extends Plugin {
         leadingNewLine,
         appendBelowExistingTasks,
         skipHorizontalRule,
+        skipExistingTodos,
       } = this.settings;
 
       // check if there is a daily note from yesterday
@@ -277,6 +279,7 @@ export default class RolloverTodosPlugin extends Plugin {
             leadingNewLine,
             appendBelowExistingTasks,
             skipHorizontalRule,
+            skipExistingTodos,
           });
 
         if (templateHeadingSelected && !templateHeadingFound) {
