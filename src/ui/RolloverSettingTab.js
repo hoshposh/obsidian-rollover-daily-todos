@@ -177,10 +177,8 @@ export default class RolloverSettingTab extends PluginSettingTab {
               : this.plugin.settings.rolloverOnFileCreate
           )
           .onChange((value) => {
-            console.log(value);
             this.plugin.settings.rolloverOnFileCreate = value;
             this.plugin.saveSettings();
-            this.plugin.loadData().then((value) => console.log(value));
           })
       );
 

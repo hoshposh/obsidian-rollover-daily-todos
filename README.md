@@ -41,11 +41,15 @@ If you chose a template file to use for new daily notes in `Daily notes > Settin
 
 If you leave this field as blank, or select `None`, then incomplete todos will be rolled onto the end of today's note (for new notes with no template, the end is the beginning of the note).
 
-### 3. Delete todos from previous day
+### 3. Action on previous day's todos
 
-By default, this plugin will actually make a copy of incomplete todos. So if you forgot to wash your dog yesterday, and didn't check it off, then you will have an incomplete checkmark on yesterday's daily note, and a new incomplete checkmark will be rolled into today's daily note. If you use the `Undo last rollover` command, deleted todos will be restored (remember, the `time limit on this is 2 minutes`).
+When today's note has a copy of the rolled todos, the plugin can also do one of three things to the lines on yesterday's note:
 
-Toggling this setting on will remove incomplete todos from the previous daily note once today's daily note has a copy of them.
+- **Leave them alone** (default) — yesterday is untouched. You'll have an incomplete checkmark on both days until you tick it off manually.
+- **Mark them** — yesterday's checkbox content is replaced with a marker character of your choice (`>` by default), so the todos read e.g. `- [>] feed the dog`. Useful if you want a visible "rolled forward" trace on the source day.
+- **Delete them** — the rolled lines are spliced out of yesterday's note (legacy `deleteOnComplete` behaviour). See the *Tabs vs spaces* known issue below — this path matches lines exactly and is sensitive to indentation drift.
+
+If you use `Undo last rollover` (within 2 minutes, persists across restart), the source action is undone too.
 
 ### 4. Remove empty todos in rollover
 
@@ -85,11 +89,11 @@ If you sync via Obsidian Sync, LiveSync, or `obsidian-git`, the source (yesterda
 
 ### Tabs vs spaces in indentation (deletion path only)
 
-The `deleteOnComplete` (delete) source action does an *exact-string* match when removing rolled todos from yesterday's note. If your indentation differs even by one whitespace character, the line will not be deleted. Use the new `mark` source action (default in 1.3.0) to avoid this footgun, or normalise your indentation before relying on `delete`.
+The `delete` source action does an *exact-string* match when removing rolled todos from yesterday's note. If your indentation differs even by one whitespace character, the line will not be deleted. Use the `mark` source action instead to avoid this footgun (it rewrites the checkbox in place, so indentation drift doesn't matter), or normalise your indentation before relying on `delete`. The default action is **leave them alone**, which is unaffected.
 
 ## Behaviour notes
 
-1. The parser regex (anchored to start of line in 1.3.0) is `/^\s*[-*+] \[[^xX-]\]/` — bullet, space, brackets with non-done content. Customise the "done" set via the **Done status markers** setting (any single grapheme cluster is supported, including emoji).
+1. A line is treated as an incomplete todo when it matches `\s*[-*+] \[(.+?)\]` AND the bracket content is exactly one grapheme cluster AND that cluster is *not* in the **Done status markers** set (`x`, `X`, `-` by default). This means emoji and other multi-byte status markers work as long as they're a single grapheme. Customise the done set in settings.
 
 2. If you trigger `Rollover Todos Now` too quickly after editing yesterday's note, Obsidian may not have flushed the file yet. Run `Undo last rollover` (which now persists across restart) and retry after a second.
 

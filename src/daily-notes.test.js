@@ -5,22 +5,63 @@ import {
   getTodaysDailyNote,
 } from "./daily-notes";
 
-// Minimal moment polyfill for tests so the helper can be tested headless.
-// vitest runs in Node by default — set up a window shim before any helper
-// calls execute. moment is reached via the obsidian-daily-notes-interface
-// transitive dep that already ships with the project.
-beforeAll(async () => {
-  const m = await import(
-    /* @vite-ignore */
-    "../node_modules/.pnpm/moment@2.29.4/node_modules/moment/moment.js"
-  );
-  const moment = m.default || m;
+// Tiny window.moment stub for headless vitest runs. Only the slice of moment
+// that getTodaysDailyNote actually exercises is implemented:
+//   moment()                     → "today" wrapper with format() / isSame()
+//   moment(input, fmt, strict)   → parser wrapper with isValid() / isSame()
+//   .subtract(n, "day").format() → used in tests to build "yesterday" paths
+// We avoid pulling moment in transitively (the previous .pnpm path import was
+// brittle and broke in worktrees / on dependency bumps).
+beforeAll(() => {
+  const fmt = (d, format) => {
+    const yyyy = String(d.getUTCFullYear()).padStart(4, "0");
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    if (format === "YYYY-MM-DD") return `${yyyy}-${mm}-${dd}`;
+    if (format === "DD-MM-YYYY") return `${dd}-${mm}-${yyyy}`;
+    throw new Error(`test moment stub: unsupported format ${format}`);
+  };
+  const sameDay = (a, b) =>
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate();
+  const wrap = (d, valid = true) => ({
+    isValid: () => valid,
+    isSame: (other, _unit) => valid && sameDay(d, other.__date || d),
+    format: (format) => fmt(d, format),
+    subtract: (n, unit) => {
+      if (unit !== "day" && unit !== "days") {
+        throw new Error(`test moment stub: unsupported unit ${unit}`);
+      }
+      const next = new Date(d.getTime() - n * 86400000);
+      return wrap(next);
+    },
+    __date: d,
+  });
+  const moment = (input, format) => {
+    if (input === undefined) return wrap(new Date());
+    if (typeof input === "string" && format) {
+      // strict-ish parse: try YYYY-MM-DD or DD-MM-YYYY
+      const match =
+        format === "YYYY-MM-DD"
+          ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(input)
+          : format === "DD-MM-YYYY"
+          ? /^(\d{2})-(\d{2})-(\d{4})$/.exec(input)
+          : null;
+      if (!match) return wrap(new Date(NaN), false);
+      const [, a, b, c] = match;
+      const date =
+        format === "YYYY-MM-DD"
+          ? new Date(Date.UTC(+a, +b - 1, +c))
+          : new Date(Date.UTC(+c, +b - 1, +a));
+      return wrap(date);
+    }
+    return wrap(new Date(NaN), false);
+  };
   if (typeof globalThis.window === "undefined") {
     globalThis.window = {};
   }
-  if (!globalThis.window.moment) {
-    globalThis.window.moment = moment;
-  }
+  globalThis.window.moment = moment;
 });
 
 const fakeFile = (path) => ({
@@ -218,5 +259,61 @@ describe("getTodaysDailyNote", () => {
       files: [fakeFile(`Other/${today}.md`)],
     });
     expect(getTodaysDailyNote(app)).toBe(null);
+  });
+
+  // (#146) regression: folder-structured formats (e.g. YYYY/MM/DD as the
+  // date format itself) produce paths whose date components straddle
+  // directory separators. We must parse the folder-stripped path, not the
+  // basename alone.
+  test("parses folder-structured date formats by stripping the daily-notes folder prefix", () => {
+    const todayDate = new Date();
+    const yyyy = String(todayDate.getUTCFullYear()).padStart(4, "0");
+    const mm = String(todayDate.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(todayDate.getUTCDate()).padStart(2, "0");
+    // Path layout: <folder>/<YYYY>/<MM>/<DD>.md
+    const path = `Daily/${yyyy}/${mm}/${dd}.md`;
+    const file = {
+      path,
+      basename: dd, // basename alone never parses the year/month — that's the bug
+      extension: "md",
+    };
+    // Override the moment stub for this format. Real moment handles
+    // `YYYY/MM/DD` natively; our stub only knows YYYY-MM-DD / DD-MM-YYYY,
+    // so we plug a third format in for this single test.
+    const previous = window.moment;
+    const slashFmt = (str, format) => {
+      if (format !== "YYYY/MM/DD") return previous(str, format);
+      const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(str);
+      if (!m) {
+        return { isValid: () => false, isSame: () => false, format: () => "" };
+      }
+      const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+      return {
+        isValid: () => true,
+        isSame: (other) => {
+          const o = other.__date || new Date();
+          return (
+            d.getUTCFullYear() === o.getUTCFullYear() &&
+            d.getUTCMonth() === o.getUTCMonth() &&
+            d.getUTCDate() === o.getUTCDate()
+          );
+        },
+        format: () => str,
+        __date: d,
+      };
+    };
+    window.moment = (input, format) =>
+      input === undefined ? previous() : slashFmt(input, format);
+
+    const app = buildApp({
+      core: {
+        enabled: true,
+        instance: { options: { folder: "Daily", format: "YYYY/MM/DD" } },
+      },
+      files: [file],
+    });
+    expect(getTodaysDailyNote(app)?.path).toBe(path);
+
+    window.moment = previous;
   });
 });

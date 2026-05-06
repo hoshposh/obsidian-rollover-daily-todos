@@ -31,34 +31,6 @@ const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 // it entirely.
 const SETTLE_WINDOW_MS = 3000;
 
-/* Just some boilerplate code for recursively going through subheadings for later
-function createRepresentationFromHeadings(headings) {
-  let i = 0;
-  const tags = [];
-
-  (function recurse(depth) {
-    let unclosedLi = false;
-    while (i < headings.length) {
-      const [hashes, data] = headings[i].split("# ");
-      if (hashes.length < depth) {
-        break;
-      } else if (hashes.length === depth) {
-        if (unclosedLi) tags.push('</li>');
-        unclosedLi = true;
-        tags.push('<li>', data);
-        i++;
-      } else {
-        tags.push('<ul>');
-        recurse(depth + 1);
-        tags.push('</ul>');
-      }
-    }
-    if (unclosedLi) tags.push('</li>');
-  })(-1);
-  return tags.join('\n');
-}
-*/
-
 export default class RolloverTodosPlugin extends Plugin {
   async loadSettings() {
     const DEFAULT_SETTINGS = {
@@ -187,18 +159,6 @@ export default class RolloverTodosPlugin extends Plugin {
     });
   }
 
-  async sortHeadersIntoHierarchy(file) {
-    ///console.log('testing')
-    const templateContents = await this.app.vault.read(file);
-    const allHeadings = Array.from(templateContents.matchAll(/#{1,} .*/g)).map(
-      ([heading]) => heading
-    );
-
-    if (allHeadings.length > 0) {
-      console.log(createRepresentationFromHeadings(allHeadings));
-    }
-  }
-
   getCleanFolder(folder) {
     // Check if user defined folder with root `/` e.g. `/dailies`
     if (folder.startsWith("/")) {
@@ -276,15 +236,8 @@ export default class RolloverTodosPlugin extends Plugin {
       const lastDailyNote = this.getLastDailyNote();
       if (!lastDailyNote) return;
 
-      // TODO: Rollover to subheadings (optional)
-      //this.sortHeadersIntoHierarchy(lastDailyNote)
-
       // get unfinished todos from yesterday, if exist
       let todos_yesterday = await this.getAllUnfinishedTodos(lastDailyNote);
-
-      console.log(
-        `rollover-daily-todos: ${todos_yesterday.length} todos found in ${lastDailyNote.basename}.md`
-      );
 
       if (todos_yesterday.length == 0) {
         return;
@@ -302,14 +255,20 @@ export default class RolloverTodosPlugin extends Plugin {
         },
       };
 
-      // Potentially filter todos from yesterday for today
+      // Potentially filter todos from yesterday for today. Shared between
+      // the legacy path and the section-routing path; the latter re-parses
+      // yesterday into per-heading buckets and applies the same filter to
+      // each bucket below.
+      const isEmptyTodoLine = (line) => {
+        const t = (line || "").trim();
+        return t === "- [ ]" || t === "- [  ]";
+      };
       let todosAdded = 0;
       let emptiesToNotAddToTomorrow = 0;
       let todos_today = !removeEmptyTodos ? todos_yesterday : [];
       if (removeEmptyTodos) {
-        todos_yesterday.forEach((line, i) => {
-          const trimmedLine = (line || "").trim();
-          if (trimmedLine != "- [ ]" && trimmedLine != "- [  ]") {
+        todos_yesterday.forEach((line) => {
+          if (!isEmptyTodoLine(line)) {
             todos_today.push(line);
             todosAdded++;
           } else {
@@ -344,7 +303,27 @@ export default class RolloverTodosPlugin extends Plugin {
             lines: yesterdayLines,
             withChildren: this.settings.rolloverChildren,
             doneStatusMarkers: this.settings.doneStatusMarkers,
+            ignoreBlockquotes: this.settings.ignoreBlockquotes,
+            skipCompletedChildren: this.settings.skipCompletedChildren,
           });
+          // Apply removeEmptyTodos to each bucket and recompute counts so
+          // the user-facing Notice reflects what was actually inserted.
+          if (removeEmptyTodos) {
+            todosAdded = 0;
+            emptiesToNotAddToTomorrow = 0;
+            for (const bucket of todosBySection.values()) {
+              const kept = [];
+              for (const line of bucket.todos) {
+                if (isEmptyTodoLine(line)) {
+                  emptiesToNotAddToTomorrow++;
+                } else {
+                  kept.push(line);
+                  todosAdded++;
+                }
+              }
+              bucket.todos = kept;
+            }
+          }
           const result = buildSectionRoutedContent({
             dailyNoteContent,
             todosBySection,

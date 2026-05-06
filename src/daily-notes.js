@@ -83,6 +83,11 @@ export function isDailyNotesEnabled(app) {
 // Returns today's daily-note TFile if it exists, otherwise null.
 // Replaces obsidian-daily-notes-interface's getAllDailyNotes + getDailyNote
 // pair (we never need the full map; only "find today's note").
+//
+// Folder-structured formats (#146) like `GGGG/[W]WW/YYYY-MM-DD` produce paths
+// such as `2026/W19/2026-05-06.md`. We must parse the configured-folder-
+// stripped path (not just the basename), because the format itself contains
+// directory separators.
 export function getTodaysDailyNote(app) {
   if (!app || !window.moment) return null;
   const moment = window.moment;
@@ -92,7 +97,9 @@ export function getTodaysDailyNote(app) {
   const files = app.vault?.getMarkdownFiles?.() || [];
   for (const file of files) {
     if (prefix && !file.path.startsWith(prefix)) continue;
-    const m = moment(file.basename, format, true);
+    let path = file.path.substring(prefix.length);
+    if (path.endsWith(".md")) path = path.substring(0, path.length - 3);
+    const m = moment(path, format, true);
     if (!m.isValid()) continue;
     if (m.isSame(today, "day")) return file;
   }
