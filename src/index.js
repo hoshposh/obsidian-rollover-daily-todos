@@ -16,6 +16,21 @@ import { applySourceAction, resolveSourceAction } from "./source-action";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
+// (#155/#89/#144/#146/#105/#162) Templater-safety settle window. After we
+// write today's note, wait this long for any *other* plugin (Templater,
+// Obsidian Sync, etc.) to also write the file. If something else writes,
+// we treat the destination write as not-verified and skip the destructive
+// `applySourceAction` step on yesterday's note. This keeps yesterday's
+// todos intact under the Templater race even though the user may still
+// see Templater's rendered template overwrite the rolled block on today's
+// side. The 3000ms window is generous: Templater itself waits 300ms
+// before reading the empty file and rendering, and slow user templates
+// (e.g. <% tp.web.daily_quote() %> per #146) can take >1s. The cost is
+// 3s of extra latency on every rollover where the source action is
+// destructive — only "delete"/"mark" pay this; the default "none" skips
+// it entirely.
+const SETTLE_WINDOW_MS = 3000;
+
 /* Just some boilerplate code for recursively going through subheadings for later
 function createRepresentationFromHeadings(headings) {
   let i = 0;
@@ -198,6 +213,11 @@ export default class RolloverTodosPlugin extends Plugin {
     return folder;
   }
 
+  // Plain millisecond sleep, extracted so tests can stub it if needed.
+  async waitForSettle(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   async rollover(file = undefined) {
     /*** First we check if the file created is actually a valid daily note ***/
     let { folder, format } = getDailyNoteSettings(this.app);
@@ -357,19 +377,68 @@ export default class RolloverTodosPlugin extends Plugin {
           templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily not. Rolling todos to end of file.`;
         }
 
+        // (F1, #155/#89/#144/#146/#105/#162) Templater-safety settle
+        // window. Pre-F1, the verify step ran synchronously after our
+        // own modify and always passed because vault.read returns the
+        // bytes we just wrote. With Templater installed, Templater's
+        // overwrite lands tens-to-hundreds of ms later, AFTER the verify
+        // had passed and AFTER the destructive source action had already
+        // run. Result: data-loss (yesterday cleared, today clobbered).
+        //
+        // Fix: register a "modify" event listener for THIS specific file,
+        // then write our content. Any subsequent write whose payload
+        // differs from `newContent` is a third-party clobber and we
+        // abort the destructive source action. We also re-read at the
+        // end of the settle window as a belt-and-braces check (covers
+        // scenarios where the modify event fires later than the actual
+        // write).
+        //
+        // The settle window only runs when the source action is
+        // destructive ("delete"/"mark"). For "none" the verify is moot
+        // and the latency is wasteful.
+        let externalClobber = false;
+        let modifyEventRef = null;
+        if (sourceAction !== "none") {
+          modifyEventRef = this.app.vault.on(
+            "modify",
+            async (modifiedFile) => {
+              if (!modifiedFile || modifiedFile.path !== file.path) return;
+              try {
+                const current = await this.app.vault.read(modifiedFile);
+                if (current !== newContent) {
+                  externalClobber = true;
+                }
+              } catch (_) {
+                // ignore — a missing file would be detected by the
+                // post-settle verify below
+              }
+            }
+          );
+        }
+
         await this.app.vault.modify(file, newContent);
 
-        // (#162) verify today's note actually received the rolled todos before
-        // we permit the destructive deleteOnComplete branch to run. If another
-        // plugin (Templater, sync) rewrote the file between our modify and now,
-        // the rolled lines won't be present and we'd otherwise lose them.
-        const verifyContent = await this.app.vault.read(file);
-        insertionVerified = verifyTodosPresent(verifyContent, todos_today);
-        if (!insertionVerified) {
-          new Notice(
-            "Rollover aborted: could not verify that today's note received the rolled todos. Yesterday's note was left unchanged. (Likely cause: another plugin overwrote today's note. See README.)",
-            10000
-          );
+        if (sourceAction !== "none") {
+          await this.waitForSettle(SETTLE_WINDOW_MS);
+          const verifyContent = await this.app.vault.read(file);
+          insertionVerified =
+            !externalClobber &&
+            verifyTodosPresent(verifyContent, todos_today);
+          if (!insertionVerified) {
+            new Notice(
+              "Rollover aborted source-side cleanup: today's note was modified by another plugin (likely Templater) after rollover. Yesterday's note was left unchanged. See README for the recommended Templater workaround.",
+              10000
+            );
+          }
+        } else {
+          // No source action means no destructive step to guard; treat
+          // the write as verified to keep the rest of the flow simple.
+          insertionVerified = true;
+        }
+
+        if (modifyEventRef) {
+          this.app.vault.offref(modifyEventRef);
+          modifyEventRef = null;
         }
       }
 
