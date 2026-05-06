@@ -229,7 +229,26 @@ describe("rollover plugin (integrated triage)", function () {
 
     await browser.executeObsidianCommand(ROLLOVER_CMD);
 
-    const yesterdayContent = await readNote(`${yesterday}.md`);
+    // The rollover command callback is fire-and-forget; with the F1
+    // Templater-safety settle window in place (~1.5s), the destructive
+    // source-side step doesn't run synchronously. Poll for up to 4s for
+    // yesterday's content to reflect the mark.
+    const yesterdayContent = await browser.executeObsidian(
+      async ({ app }, { relPath }) => {
+        const start = Date.now();
+        while (Date.now() - start < 4000) {
+          const f = app.vault.getAbstractFileByPath(relPath);
+          if (f) {
+            const c = await app.vault.read(f);
+            if (c.includes("- [>] one")) return c;
+          }
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        const f = app.vault.getAbstractFileByPath(relPath);
+        return f ? await app.vault.read(f) : null;
+      },
+      { relPath: `${yesterday}.md` }
+    );
     expect(yesterdayContent).toContain("- [>] one");
     expect(yesterdayContent).toContain("- [>] two");
     // already-done lines must be untouched (they were never rolled)
