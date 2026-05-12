@@ -12,7 +12,12 @@ import {
   getTodosBySection,
   buildSectionRoutedContent,
 } from "./section-routing";
-import { applySourceAction, resolveSourceAction } from "./source-action";
+import {
+  applySourceAction,
+  ensureMarkerInDoneStatusMarkers,
+  migrateSourceActionSettings,
+  resolveSourceAction,
+} from "./source-action";
 
 const MAX_TIME_SINCE_CREATION = 5000; // 5 seconds
 
@@ -46,8 +51,9 @@ export default class RolloverTodosPlugin extends Plugin {
       skipExistingTodos: false,
       ignoreBlockquotes: false,
       skipCompletedChildren: false,
-      // (#143/#68/#54/#126/#150/#37/#33/#164) parse yesterday into per-heading
-      // buckets and route each bucket to the matching heading on today's side
+      // (#143/#37/#33/#164) parse yesterday into per-heading buckets and route
+      // each bucket to the matching heading on today's side. Related, but not
+      // equivalent, to source-filter requests (#68/#54/#126/#150).
       rolloverToMatchingSections: false,
       // (#153/#48/#106/#128/#142) tri-state replacement for deleteOnComplete:
       //   "none"   — leave yesterday's note untouched (safest default)
@@ -60,11 +66,19 @@ export default class RolloverTodosPlugin extends Plugin {
     // (#162) recover any persisted undo state so undo survives Obsidian restart
     this._persistedUndo = stored._undo || null;
     const { _undo, ...settings } = stored;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, settings);
+    this.settings = ensureMarkerInDoneStatusMarkers(
+      migrateSourceActionSettings(
+        Object.assign({}, DEFAULT_SETTINGS, settings),
+        settings
+      )
+    );
   }
 
   async saveSettings() {
-    await this.saveData({ ...this.settings, _undo: this._persistedUndo || null });
+    await this.saveData({
+      ...this.settings,
+      _undo: this._persistedUndo || null,
+    });
   }
 
   // (#162) persist the latest undo state so it survives plugin reload/restart.
@@ -353,7 +367,7 @@ export default class RolloverTodosPlugin extends Plugin {
           templateHeadingSelected &&
           !templateHeadingFound
         ) {
-          templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily not. Rolling todos to end of file.`;
+          templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily note. Rolling todos to end of file.`;
         }
 
         // (F1, #155/#89/#144/#146/#105/#162) Templater-safety settle
@@ -378,21 +392,18 @@ export default class RolloverTodosPlugin extends Plugin {
         let externalClobber = false;
         let modifyEventRef = null;
         if (sourceAction !== "none") {
-          modifyEventRef = this.app.vault.on(
-            "modify",
-            async (modifiedFile) => {
-              if (!modifiedFile || modifiedFile.path !== file.path) return;
-              try {
-                const current = await this.app.vault.read(modifiedFile);
-                if (current !== newContent) {
-                  externalClobber = true;
-                }
-              } catch (_) {
-                // ignore — a missing file would be detected by the
-                // post-settle verify below
+          modifyEventRef = this.app.vault.on("modify", async (modifiedFile) => {
+            if (!modifiedFile || modifiedFile.path !== file.path) return;
+            try {
+              const current = await this.app.vault.read(modifiedFile);
+              if (current !== newContent) {
+                externalClobber = true;
               }
+            } catch (_) {
+              // ignore — a missing file would be detected by the
+              // post-settle verify below
             }
-          );
+          });
         }
 
         await this.app.vault.modify(file, newContent);
@@ -401,8 +412,7 @@ export default class RolloverTodosPlugin extends Plugin {
           await this.waitForSettle(SETTLE_WINDOW_MS);
           const verifyContent = await this.app.vault.read(file);
           insertionVerified =
-            !externalClobber &&
-            verifyTodosPresent(verifyContent, todos_today);
+            !externalClobber && verifyTodosPresent(verifyContent, todos_today);
           if (!insertionVerified) {
             new Notice(
               "Rollover aborted source-side cleanup: today's note was modified by another plugin (likely Templater) after rollover. Yesterday's note was left unchanged. See README for the recommended Templater workaround.",

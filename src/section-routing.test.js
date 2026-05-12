@@ -33,9 +33,7 @@ describe("getTodosBySection", () => {
     const lines = ["- [ ] orphan", "# Later", "- [ ] under heading"];
     const sections = getTodosBySection({ lines });
     expect(sections.get(NO_HEADING).todos).toStrictEqual(["- [ ] orphan"]);
-    expect(sections.get("later").todos).toStrictEqual([
-      "- [ ] under heading",
-    ]);
+    expect(sections.get("later").todos).toStrictEqual(["- [ ] under heading"]);
   });
 
   test("done todos are excluded (uses getTodos under the hood)", () => {
@@ -75,10 +73,24 @@ describe("getTodosBySection", () => {
       "- [ ] two",
     ];
     const sections = getTodosBySection({ lines });
-    expect(sections.get("foo").todos).toStrictEqual([
-      "- [ ] one",
-      "- [ ] two",
+    expect(sections.get("foo").todos).toStrictEqual(["- [ ] one", "- [ ] two"]);
+  });
+
+  test("horizontal rules end the current source section", () => {
+    const lines = [
+      "## Foo",
+      "- [ ] under foo",
+      "---",
+      "- [ ] after divider",
+      "## Bar",
+      "- [ ] under bar",
+    ];
+    const sections = getTodosBySection({ lines });
+    expect(sections.get("foo").todos).toStrictEqual(["- [ ] under foo"]);
+    expect(sections.get(NO_HEADING).todos).toStrictEqual([
+      "- [ ] after divider",
     ]);
+    expect(sections.get("bar").todos).toStrictEqual(["- [ ] under bar"]);
   });
 });
 

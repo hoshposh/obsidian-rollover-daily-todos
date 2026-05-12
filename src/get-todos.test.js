@@ -530,7 +530,7 @@ test("does not match bullet patterns embedded mid-line (e.g. inside template lit
   expect(todos).toStrictEqual(["- [ ] this is a real todo"]);
 });
 
-test("(#165) ignoreBlockquotes=false (default): blockquoted bullet lines are not matched as todos because the start-of-line anchor (cluster A) requires a real bullet, not '>'", () => {
+test("(#165/#170) ignoreBlockquotes=false (default): blockquoted bullet lines still roll over", () => {
   const lines = [
     "- [ ] one",
     "> - [ ] two (in callout body)",
@@ -538,7 +538,11 @@ test("(#165) ignoreBlockquotes=false (default): blockquoted bullet lines are not
     "> - [ ] three (in callout body)",
   ];
   const todos = getTodos({ lines });
-  expect(todos).toStrictEqual(["- [ ] one"]);
+  expect(todos).toStrictEqual([
+    "- [ ] one",
+    "> - [ ] two (in callout body)",
+    "> - [ ] three (in callout body)",
+  ]);
 });
 
 test("(#165) ignoreBlockquotes=true: blockquoted todos are skipped", () => {
@@ -605,6 +609,21 @@ test("(#125) skipCompletedChildren=true: completed todo children are dropped, no
   ]);
 });
 
+test("(#125/#170) skipCompletedChildren=true recognizes completed blockquoted children", () => {
+  const lines = [
+    "- [ ] parent",
+    "    > - [x] done child in callout",
+    "        > - [ ] grandchild that should be dropped",
+    "    - [ ] open child",
+  ];
+  const todos = getTodos({
+    lines,
+    withChildren: true,
+    skipCompletedChildren: true,
+  });
+  expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
+});
+
 test("(#125) skipCompletedChildren=true: also drops descendants of a completed child", () => {
   const lines = [
     "- [ ] parent",
@@ -635,7 +654,6 @@ test("(#125) respects custom done markers", () => {
   });
   expect(todos).toStrictEqual(["- [ ] parent", "    - [ ] open child"]);
 });
-
 
 test("should not match malformed todos", () => {
   const lines = [

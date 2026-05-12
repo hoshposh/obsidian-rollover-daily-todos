@@ -3,12 +3,15 @@
 // insensitive, level-agnostic). Buckets with no matching heading in today's
 // note (and the implicit "no source heading" bucket) are appended at the end.
 //
-// Closes #143, #68, #54, #126, #150, #37, #33, #164. Adapted from PR #167.
+// Covers heading-preservation requests #143, #37, #33, #164. It is related
+// to, but does not fully close, source-filter requests #68, #54, #126, #150.
+// Adapted from PR #167.
 
 import { getTodos } from "./get-todos";
 import { buildNewDailyNoteContent } from "./insert-todos";
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*$/;
+const HORIZONTAL_RULE_RE = /^\s*-{3,}\s*$/;
 // "no source heading" bucket key — Map keys are sentinel-checked with ===
 const NO_HEADING = Symbol("no-heading");
 
@@ -60,6 +63,11 @@ export function getTodosBySection({
       flush(i);
       currentKey = m[2].trim().toLowerCase();
       currentHeadingLine = lines[i];
+      segmentStart = i + 1;
+    } else if (HORIZONTAL_RULE_RE.test(lines[i])) {
+      flush(i);
+      currentKey = NO_HEADING;
+      currentHeadingLine = null;
       segmentStart = i + 1;
     }
   }

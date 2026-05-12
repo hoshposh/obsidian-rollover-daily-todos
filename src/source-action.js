@@ -9,9 +9,10 @@
 //              bullet-journal "forwarded" convention). Non-todo children of
 //              rolled parents are left as-is.
 //
-// Closes #153, #48, #106, #128, #142.
+// Covers #153, #106, #128, #142 and the core "mark instead of delete" part of
+// #48. It does not add strikethrough/backlink transformations.
 
-const CHECKBOX_RE = /^(\s*[*+\-] \[).+?(\])/;
+const CHECKBOX_RE = /^(\s*(?:>\s*)*[*+\-] \[).+?(\])/;
 
 /**
  * @param {object} args
@@ -65,4 +66,27 @@ export function resolveSourceAction(settings) {
   }
   // legacy users: deleteOnComplete=true => "delete", else "none"
   return settings.deleteOnComplete ? "delete" : "none";
+}
+
+export function migrateSourceActionSettings(settings, storedSettings = {}) {
+  if (
+    storedSettings.onRolloverSourceAction === undefined &&
+    storedSettings.deleteOnComplete === true
+  ) {
+    return { ...settings, onRolloverSourceAction: "delete" };
+  }
+  return settings;
+}
+
+export function ensureMarkerInDoneStatusMarkers(settings) {
+  if (resolveSourceAction(settings) !== "mark") return settings;
+
+  const marker = settings.rolloverSourceMarker || ">";
+  const doneStatusMarkers = settings.doneStatusMarkers || "";
+  if (doneStatusMarkers.includes(marker)) return settings;
+
+  return {
+    ...settings,
+    doneStatusMarkers: `${doneStatusMarkers}${marker}`,
+  };
 }

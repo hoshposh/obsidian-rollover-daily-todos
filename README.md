@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/lumoe/obsidian-rollover-daily-todos/actions/workflows/ci.yml/badge.svg)](https://github.com/lumoe/obsidian-rollover-daily-todos/actions/workflows/ci.yml)
 
-This Obsidian plugin will rollover any incomplete todo items from the previous daily note (could be yesterday, or a week ago) to today. This is triggered automatically when a new daily note is created via the internal `Daily notes` plugin, or the `Periodic Notes` plugin., It can also be run as a command from the Command Palette.
+This Obsidian plugin will rollover any incomplete todo items from the previous daily note (could be yesterday, or a week ago) to today. This is triggered automatically when a new daily note is created via the internal `Daily notes` plugin or the `Periodic Notes` plugin. It can also be run as a command from the Command Palette.
 
 ![A demo of the plugin working](./demo.gif)
 
@@ -47,7 +47,7 @@ When today's note has a copy of the rolled todos, the plugin can also do one of 
 
 - **Leave them alone** (default) — yesterday is untouched. You'll have an incomplete checkmark on both days until you tick it off manually.
 - **Mark them** — yesterday's checkbox content is replaced with a marker character of your choice (`>` by default), so the todos read e.g. `- [>] feed the dog`. Useful if you want a visible "rolled forward" trace on the source day.
-- **Delete them** — the rolled lines are spliced out of yesterday's note (legacy `deleteOnComplete` behaviour). See the *Tabs vs spaces* known issue below — this path matches lines exactly and is sensitive to indentation drift.
+- **Delete them** — the rolled lines are spliced out of yesterday's note (legacy `deleteOnComplete` behaviour). See the _Tabs vs spaces_ known issue below — this path matches lines exactly and is sensitive to indentation drift.
 
 If you use `Undo last rollover` (within 2 minutes, persists across restart), the source action is undone too.
 
@@ -59,21 +59,45 @@ By default, this plugin will roll over anything that has a checkbox, whether it 
 
 By default, only the actual todos are rolled over. If you add nested Markdown elements beneath your todos, these are not rolled over but stay in place. Toggling this setting on allows for also migrating the nested elements, including ones that are completed.
 
-### 6. Done status markers
+### 6. Skip completed children
+
+When **Roll over children of todos** is on, this optional setting drops completed child todos and their descendants while still carrying non-todo child text.
+
+### 7. Ignore todos in callouts / blockquotes
+
+By default, Markdown blockquote todos such as `> - [ ] Drink water` are treated like regular todos and will roll over. Turn this setting on if you keep daily habit checklists inside Obsidian callouts and want those callout todos to reset instead of rolling forward.
+
+### 8. Roll over to matching sections
+
+When enabled, todos are grouped by the heading they appeared under in the previous daily note and routed under the same-named heading in today's note. Heading matching is case-insensitive and ignores heading level, so `# House` can match `## house`. A horizontal rule in yesterday's note ends the current source section. Todos from sections with no matching heading fall back to the configured Template heading, or to the end of the note if no Template heading is configured.
+
+### 9. Skip todos already present today
+
+When enabled, a todo whose trimmed line already appears in today's note is not inserted again. This is useful for recurring tasks that your daily template already creates.
+
+### 10. Insertion formatting
+
+- **Add extra blank line between Heading and Todos** controls whether inserted todos get a blank line after the target heading.
+- **Append below existing tasks** places rolled todos at the end of an existing task list under the target heading.
+- **Place todos below a horizontal rule** keeps a `---` rule directly below the target heading above the inserted todos.
+
+### 11. Done status markers
 
 By default, the plugin considers checkboxes containing 'x', 'X', or '-' as completed tasks that won't be rolled over. You can customize this by adding any characters that should be considered "done" markers. For example, adding '?+>' would also treat checkboxes like '[?]', '[+]', and '[>]' as completed tasks. This is useful for users of custom status markers like the [Obsidian Tasks](https://publish.obsidian.md/tasks/Introduction) plugin.
 
 The plugin supports Unicode characters, including complex emoji and grapheme clusters, in checkbox content. This means you can use emojis or special Unicode characters as status markers and they will be handled correctly.
 
+When you choose **Mark them** as the source action, the mark character is automatically added to Done status markers so marked source todos do not roll over again the next day.
+
 ## Compatibility
 
-Tested against Obsidian **1.12.x** (latest stable, 2026-04). `minAppVersion` in `manifest.json` is `1.4.0`. Mobile (iOS/Android) is supported. Periodic Notes 0.x and 1.0+ (calendar-set rewrite) are both detected and read correctly.
+The end-to-end suite runs against Obsidian **1.11.5**. `minAppVersion` in `manifest.json` is `1.4.0`. Mobile (iOS/Android) is supported. Periodic Notes 0.x and 1.0+ (calendar-set rewrite) are both detected and read correctly.
 
 ## Known issues
 
 ### Templater conflict (auto-rollover fires before template is applied)
 
-If your daily-notes template uses [Templater](https://github.com/SilentVoid13/Templater), automatic rollover may fire on file-create *before* Templater has finished processing the template. Symptom: rolled-over todos appear briefly then vanish, or the new note ends up with template placeholders intact and no todos.
+If your daily-notes template uses [Templater](https://github.com/SilentVoid13/Templater), automatic rollover may fire on file-create _before_ Templater has finished processing the template. Symptom: rolled-over todos appear briefly then vanish, or the new note ends up with template placeholders intact and no todos.
 
 **Recommended fix**: invoke the rollover from within your Templater template instead of relying on the file-create hook. Disable "Automatic rollover on daily note open" in this plugin's settings, then add to your daily-notes template:
 
@@ -81,7 +105,7 @@ If your daily-notes template uses [Templater](https://github.com/SilentVoid13/Te
 <%* await app.commands.executeCommandById("obsidian-rollover-daily-todos:obsidian-rollover-daily-todos-rollover") %>
 ```
 
-Issues #155, #144, #89, #168 are all instances of this conflict.
+Issues #155, #144, #89, #105, and #146 all match this conflict. Issue #168 has similar symptoms but needs more diagnostics before it should be treated as the same root cause.
 
 ### Multi-device sync race
 
@@ -89,11 +113,11 @@ If you sync via Obsidian Sync, LiveSync, or `obsidian-git`, the source (yesterda
 
 ### Tabs vs spaces in indentation (deletion path only)
 
-The `delete` source action does an *exact-string* match when removing rolled todos from yesterday's note. If your indentation differs even by one whitespace character, the line will not be deleted. Use the `mark` source action instead to avoid this footgun (it rewrites the checkbox in place, so indentation drift doesn't matter), or normalise your indentation before relying on `delete`. The default action is **leave them alone**, which is unaffected.
+The `delete` source action does an _exact-string_ match when removing rolled todos from yesterday's note. If your indentation differs even by one whitespace character, the line will not be deleted. Use the `mark` source action instead to avoid this footgun (it rewrites the checkbox in place, so indentation drift doesn't matter), or normalise your indentation before relying on `delete`. The default action is **leave them alone**, which is unaffected.
 
 ## Behaviour notes
 
-1. A line is treated as an incomplete todo when it matches `\s*[-*+] \[(.+?)\]` AND the bracket content is exactly one grapheme cluster AND that cluster is *not* in the **Done status markers** set (`x`, `X`, `-` by default). This means emoji and other multi-byte status markers work as long as they're a single grapheme. Customise the done set in settings.
+1. A line is treated as an incomplete todo when it starts with optional whitespace, optional Markdown blockquote markers, an unordered-list bullet, and a checkbox (`- [ ]`, `* [/]`, `> - [ ]`, etc.) AND the bracket content is exactly one grapheme cluster AND that cluster is _not_ in the **Done status markers** set (`x`, `X`, `-` by default). This means emoji and other multi-byte status markers work as long as they're a single grapheme. Customise the done set in settings.
 
 2. If you trigger `Rollover Todos Now` too quickly after editing yesterday's note, Obsidian may not have flushed the file yet. Run `Undo last rollover` (which now persists across restart) and retry after a second.
 

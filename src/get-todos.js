@@ -55,7 +55,10 @@ class TodoParser {
   // Returns true if the line is a checkbox whose content is a done marker.
   // (Distinct from #isTodo which is true only for *incomplete* todos.)
   #isDoneTodo(s) {
-    const match = s.match(/^\s*[*+\-] \[(.+?)\]/);
+    if (this.#ignoreBlockquotes && /^\s*>/.test(s)) {
+      return false;
+    }
+    const match = s.match(/^\s*(?:>\s*)*[*+\-] \[(.+?)\]/);
     if (!match) return false;
     const contentChars = this.#parseIntoChars(match[1], "checkbox content");
     if (contentChars.length !== 1) return false;
@@ -71,8 +74,10 @@ class TodoParser {
     }
 
     // (cluster A / PR #170) anchor to start of line so bullet patterns
-    // embedded in code blocks / template literals are not matched
-    const match = s.match(/^\s*[*+\-] \[(.+?)\]/);
+    // embedded in code blocks / template literals are not matched. Allow
+    // Markdown blockquote prefixes so PR #165 can control callout behavior
+    // through the ignoreBlockquotes setting instead of dropping them always.
+    const match = s.match(/^\s*(?:>\s*)*[*+\-] \[(.+?)\]/);
     if (!match) return false;
 
     const checkboxContent = match[1];

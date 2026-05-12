@@ -1,5 +1,10 @@
 import { expect, test, describe } from "vitest";
-import { applySourceAction, resolveSourceAction } from "./source-action";
+import {
+  applySourceAction,
+  ensureMarkerInDoneStatusMarkers,
+  migrateSourceActionSettings,
+  resolveSourceAction,
+} from "./source-action";
 
 describe("applySourceAction — none", () => {
   test("returns content untouched when action is none", () => {
@@ -90,9 +95,7 @@ describe("applySourceAction — mark", () => {
       action: "mark",
       marker: ">",
     });
-    expect(r.content).toBe(
-      "- [>] parent\n    - some note\n    - [>] sub"
-    );
+    expect(r.content).toBe("- [>] parent\n    - some note\n    - [>] sub");
   });
 
   test("does not touch lines not in the rolled-todos set", () => {
@@ -116,19 +119,69 @@ describe("applySourceAction — mark", () => {
     });
     expect(r.content).toBe("- [✅] one");
   });
+
+  test("marks blockquoted checkbox lines that were rolled over", () => {
+    const r = applySourceAction({
+      content: "> - [ ] callout todo\n> - [x] already done",
+      todos: ["> - [ ] callout todo"],
+      action: "mark",
+      marker: ">",
+    });
+    expect(r.content).toBe("> - [>] callout todo\n> - [x] already done");
+    expect(r.changed).toBe(true);
+  });
 });
 
 describe("resolveSourceAction — settings migration", () => {
   test("respects explicit onRolloverSourceAction", () => {
     expect(
-      resolveSourceAction({ onRolloverSourceAction: "mark", deleteOnComplete: true })
+      resolveSourceAction({
+        onRolloverSourceAction: "mark",
+        deleteOnComplete: true,
+      })
     ).toBe("mark");
-    expect(resolveSourceAction({ onRolloverSourceAction: "none" })).toBe("none");
+    expect(resolveSourceAction({ onRolloverSourceAction: "none" })).toBe(
+      "none"
+    );
   });
 
   test("falls back to legacy deleteOnComplete when new setting missing", () => {
     expect(resolveSourceAction({ deleteOnComplete: true })).toBe("delete");
     expect(resolveSourceAction({ deleteOnComplete: false })).toBe("none");
     expect(resolveSourceAction({})).toBe("none");
+  });
+
+  test("migrates stored legacy deleteOnComplete=true after defaults are merged", () => {
+    const settings = migrateSourceActionSettings(
+      { deleteOnComplete: true, onRolloverSourceAction: "none" },
+      { deleteOnComplete: true }
+    );
+    expect(settings.onRolloverSourceAction).toBe("delete");
+  });
+
+  test("does not override an explicit stored source action during migration", () => {
+    const settings = migrateSourceActionSettings(
+      { deleteOnComplete: true, onRolloverSourceAction: "mark" },
+      { deleteOnComplete: true, onRolloverSourceAction: "mark" }
+    );
+    expect(settings.onRolloverSourceAction).toBe("mark");
+  });
+
+  test("adds the mark marker to done status markers to prevent re-roll loops", () => {
+    const settings = ensureMarkerInDoneStatusMarkers({
+      onRolloverSourceAction: "mark",
+      rolloverSourceMarker: ">",
+      doneStatusMarkers: "xX-",
+    });
+    expect(settings.doneStatusMarkers).toBe("xX->");
+  });
+
+  test("does not duplicate the mark marker in done status markers", () => {
+    const settings = ensureMarkerInDoneStatusMarkers({
+      onRolloverSourceAction: "mark",
+      rolloverSourceMarker: ">",
+      doneStatusMarkers: "xX->",
+    });
+    expect(settings.doneStatusMarkers).toBe("xX->");
   });
 });

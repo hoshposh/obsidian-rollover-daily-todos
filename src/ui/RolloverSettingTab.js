@@ -1,6 +1,9 @@
 import { Setting, PluginSettingTab } from "obsidian";
 import { getDailyNoteSettings } from "../daily-notes";
-import { resolveSourceAction } from "../source-action";
+import {
+  ensureMarkerInDoneStatusMarkers,
+  resolveSourceAction,
+} from "../source-action";
 
 export default class RolloverSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
@@ -43,9 +46,7 @@ export default class RolloverSettingTab extends PluginSettingTab {
     if (templateHeadings.length > 0) {
       new Setting(this.containerEl)
         .setName("Template heading")
-        .setDesc(
-          "Which heading from your template should the todos go under"
-        )
+        .setDesc("Which heading from your template should the todos go under")
         .addDropdown((dropdown) =>
           dropdown
             .addOptions({
@@ -99,6 +100,9 @@ export default class RolloverSettingTab extends PluginSettingTab {
             // keep the legacy deleteOnComplete in sync so older code paths and
             // older plugin versions don't behave inconsistently
             this.plugin.settings.deleteOnComplete = value === "delete";
+            this.plugin.settings = ensureMarkerInDoneStatusMarkers(
+              this.plugin.settings
+            );
             this.plugin.saveSettings();
             this.display();
           })
@@ -115,6 +119,9 @@ export default class RolloverSettingTab extends PluginSettingTab {
             .setValue(this.plugin.settings.rolloverSourceMarker || ">")
             .onChange((value) => {
               this.plugin.settings.rolloverSourceMarker = value || ">";
+              this.plugin.settings = ensureMarkerInDoneStatusMarkers(
+                this.plugin.settings
+              );
               this.plugin.saveSettings();
             })
         );
@@ -211,12 +218,13 @@ export default class RolloverSettingTab extends PluginSettingTab {
       );
     new Setting(this.containerEl)
       .setName("Add extra blank line between Heading and Todos")
-      .setDesc(`Whether to add an extra blank line between the selected Heading and the rolled over todos. This will only work in combination with a configured Template Heading.`)
+      .setDesc(
+        `Whether to add an extra blank line between the selected Heading and the rolled over todos. This will only work in combination with a configured Template Heading.`
+      )
       .addToggle((toggle) =>
         toggle
           .setValue(
-            this.plugin.settings
-              .leadingNewLine === undefined ||
+            this.plugin.settings.leadingNewLine === undefined ||
               this.plugin.settings.leadingNewLine === null
               ? true
               : this.plugin.settings.leadingNewLine
@@ -244,7 +252,7 @@ export default class RolloverSettingTab extends PluginSettingTab {
     new Setting(this.containerEl)
       .setName("Roll over to matching sections")
       .setDesc(
-        `Group todos by their heading on yesterday's note and route each group to the same-named heading on today's note (case-insensitive, level-agnostic). Unmatched groups fall back to the configured Template Heading (or end of file). Closes #143/#68/#37/#33.`
+        `Group todos by their heading on yesterday's note and route each group to the same-named heading on today's note (case-insensitive, level-agnostic). Unmatched groups fall back to the configured Template Heading or end of file.`
       )
       .addToggle((toggle) =>
         toggle

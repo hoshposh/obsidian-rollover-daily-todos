@@ -68,7 +68,10 @@ async function deleteAllMarkdown() {
 // Configure the core Daily Notes plugin from inside Obsidian. We can't write
 // data.json files for core plugins from the host because Obsidian rewrites
 // them on shutdown; setting via the API ensures values stick.
-async function configureDailyNotes({ folder = "", format = "YYYY-MM-DD" } = {}) {
+async function configureDailyNotes({
+  folder = "",
+  format = "YYYY-MM-DD",
+} = {}) {
   await browser.executeObsidian(
     async ({ app }, { folder, format }) => {
       const dn = app.internalPlugins.plugins["daily-notes"];
@@ -184,6 +187,32 @@ describe("rollover plugin (integrated triage)", function () {
     // only the real todo should appear; the embedded `- [ ] ${t}` must not
     expect(todayContent).toContain("- [ ] real todo outside code block");
     expect(todayContent).not.toContain("${t}");
+  });
+
+  it("(clusters A + B) rolls over blockquote todos by default and skips them when requested", async function () {
+    const { today, yesterday } = await getDateStrings();
+    await writeNote(
+      `${yesterday}.md`,
+      ["> [!tip] Callout", "> - [ ] callout todo", "- [ ] regular todo"].join(
+        "\n"
+      )
+    );
+    await writeNote(`${today}.md`, "");
+
+    await browser.executeObsidianCommand(ROLLOVER_CMD);
+
+    let todayContent = await readNote(`${today}.md`);
+    expect(todayContent).toContain("> - [ ] callout todo");
+    expect(todayContent).toContain("- [ ] regular todo");
+
+    await writeNote(`${today}.md`, "");
+    await setSettings({ ignoreBlockquotes: true });
+
+    await browser.executeObsidianCommand(ROLLOVER_CMD);
+
+    todayContent = await readNote(`${today}.md`);
+    expect(todayContent).not.toContain("> - [ ] callout todo");
+    expect(todayContent).toContain("- [ ] regular todo");
   });
 
   it("(cluster F + H) inserts under template heading and never deletes when source-action is the default 'none'", async function () {
