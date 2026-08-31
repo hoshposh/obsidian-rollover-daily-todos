@@ -230,7 +230,7 @@ export const insertUnderHeading = (
   leadingNewLine = false
 ) => {
   const escapedHeading = targetHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const headingLineRegex = new RegExp(`^${escapedHeading}$`, "m");
+  const headingLineRegex = new RegExp(`^${escapedHeading}$`, "mi");
   const headingMatch = headingLineRegex.exec(noteContent);
 
   if (!headingMatch) {

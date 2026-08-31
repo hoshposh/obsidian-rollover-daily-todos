@@ -748,6 +748,21 @@ test("insertUnderHeading falls back to end of file when heading not found", () =
   expect(result).toBe("## Notes\n\nsome content\n- [ ] todo");
 });
 
+test("insertUnderHeading matches heading case-insensitively", () => {
+  // Today's note may capitalise the heading differently from yesterday's
+  const content = "#### Personal Projects\n\n#### Other\n";
+  const result = insertUnderHeading(content, "#### personal projects", "- [ ] todo");
+  expect(result).toBe("#### Personal Projects\n- [ ] todo\n\n#### Other\n");
+});
+
+test("insertUnderHeading still respects heading level when matching case-insensitively", () => {
+  // "#### Notes" in today and "### Notes" should NOT match (different level)
+  const content = "### Notes\n- [x] done\n\n#### Notes\n\n";
+  const result = insertUnderHeading(content, "#### notes", "- [ ] todo");
+  // todo lands under #### Notes (not ### Notes); trailing blank line follows the insert
+  expect(result).toBe("### Notes\n- [x] done\n\n#### Notes\n\n- [ ] todo\n");
+});
+
 test("insertUnderHeading with leadingNewLine adds blank line before inserted text", () => {
   const content = "### Today's intent\n";
   const result = insertUnderHeading(content, "### Today's intent", "- [ ] todo", true);

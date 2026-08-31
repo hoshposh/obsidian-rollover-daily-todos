@@ -299,7 +299,7 @@ export default class RolloverTodosPlugin extends Plugin {
             // Todos belong under a sub-heading: find or create it in today's note
             const subHeadingExists = dailyNoteContent
               .split(/\r?\n|\r|\n/g)
-              .some((l) => l === section.heading);
+              .some((l) => l.toLowerCase() === section.heading.toLowerCase());
 
             if (subHeadingExists) {
               dailyNoteContent = insertUnderHeading(
