@@ -18,7 +18,19 @@ Just create a new daily note using the `Daily notes` or `Periodic Notes` plugin.
 
 ### 2. Command: Manual Rollover Todos Now
 
-You can also open your command palette (CMD+P on macOS) and start typing `roll` to find this command. No matter where you are in Obsidian, the previous day's todos will get rolled forward. There is also a command called `Undo last rollover` which can be run within 2 minutes of a rollover occurring. Both commands are potentially destructive, and the default text element undo command (CMD+Z on macOS) didn't work. Currently only 1 undo is available for use at the moment.
+You can also open your command palette (CMD+P on macOS) and start typing `roll` to find this command. No matter where you are in Obsidian, the previous day's todos will get rolled forward.
+
+**Note:** The standard undo command (CMD+Z on macOS) does not work for rollover operations. Use the dedicated `Undo last rollover` command instead (see below).
+
+### 3. Command: Undo Last Rollover
+
+Run `Undo last rollover` from the command palette within **2 minutes** of a rollover to fully reverse it. Only the most recent rollover can be undone.
+
+The undo works by restoring complete snapshots of both files — today's note and the previous day's note — to their exact state before the rollover ran. This means:
+
+- All inserted todos and headings are removed from today's note
+- If **Delete todos from previous day** is enabled, any todos and headings removed from the previous note are restored
+- The restoration is complete regardless of how many todos or sub-headings were involved
 
 Note that if you create a daily note in the future, and you try to run this command, todos will not be rolled into a future date. They will always be rolled to today's note (if it doesn't exist, nothing will happen), from the chronologically closest (in the past) daily note.
 
@@ -43,21 +55,21 @@ If you chose a template file to use for new daily notes in `Daily notes > Settin
 
 If you leave this field as blank, or select `None`, then incomplete todos will be rolled onto the end of today's note (for new notes with no template, the end is the beginning of the note).
 
-### 3. Delete todos from previous day
+### 4. Delete todos from previous day
 
-By default, this plugin will actually make a copy of incomplete todos. So if you forgot to wash your dog yesterday, and didn't check it off, then you will have an incomplete checkmark on yesterday's daily note, and a new incomplete checkmark will be rolled into today's daily note. If you use the `Undo last rollover` command, deleted todos will be restored (remember, the `time limit on this is 2 minutes`).
+By default, this plugin will actually make a copy of incomplete todos. So if you forgot to wash your dog yesterday, and didn't check it off, then you will have an incomplete checkmark on yesterday's daily note, and a new incomplete checkmark will be rolled into today's daily note. If you use the `Undo last rollover` command, deleted todos will be restored (remember, the time limit on this is 2 minutes).
 
 Toggling this setting on will remove incomplete todos from the previous daily note once today's daily note has a copy of them.
 
-### 4. Remove empty todos in rollover
+### 5. Remove empty todos in rollover
 
-By default, this plugin will roll over anything that has a checkbox, whether it has content or not. Toggling this setting on will ignore empty todos. If you have **#3** from above toggled on, it will also delete empty todos.
+By default, this plugin will roll over anything that has a checkbox, whether it has content or not. Toggling this setting on will ignore empty todos. If you have **#4** from above toggled on, it will also delete empty todos.
 
-### 5. Roll over children of todos
+### 6. Roll over children of todos
 
 By default, only the actual todos are rolled over. If you add nested Markdown elements beneath your todos, these are not rolled over but stay in place. Toggling this setting on allows for also migrating the nested elements, including ones that are completed.
 
-### 6. Done status markers
+### 7. Done status markers
 
 By default, the plugin considers checkboxes containing 'x', 'X', or '-' as completed tasks that won't be rolled over. You can customize this by adding any characters that should be considered "done" markers. For example, adding '?+>' would also treat checkboxes like '[?]', '[+]', and '[>]' as completed tasks. This is useful for users of custom status markers like the [Obsidian Tasks](https://publish.obsidian.md/tasks/Introduction) plugin.
 

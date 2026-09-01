@@ -143,3 +143,115 @@ export const getTodos = ({
   const todoParser = new TodoParser(lines, withChildren, doneStatusMarkers);
   return todoParser.getTodos();
 };
+
+// Returns the heading level (1-6) for a line like "## Foo", or null if not a heading
+function getHeadingLevel(line) {
+  const match = line.match(/^(#{1,6}) /);
+  return match ? match[1].length : null;
+}
+
+// Returns sections from `lines` that have incomplete todos, grouped by direct parent heading.
+// Each section is { heading: string|null, incompleteTodos: string[] }.
+export const getSections = ({
+  lines,
+  withChildren = false,
+  doneStatusMarkers = null,
+}) => {
+  const sections = [];
+  let currentHeading = null;
+  let sectionLines = [];
+
+  const finalizeSection = () => {
+    const incompleteTodos = getTodos({ lines: sectionLines, withChildren, doneStatusMarkers });
+    if (incompleteTodos.length > 0) {
+      sections.push({ heading: currentHeading, incompleteTodos });
+    }
+  };
+
+  for (const line of lines) {
+    if (getHeadingLevel(line) !== null) {
+      finalizeSection();
+      currentHeading = line;
+      sectionLines = [];
+    } else {
+      sectionLines.push(line);
+    }
+  }
+  finalizeSection();
+
+  return sections;
+};
+
+// Removes heading lines whose entire section (direct content + sub-sections recursively)
+// contains no non-blank content after incomplete todos have been removed.
+export const removeEmptyHeadings = (lines) => {
+  const [result] = processSection(lines, 0, 0);
+  return result;
+};
+
+// Returns [filteredLines, nextIndex]. Processes lines starting at startIdx,
+// stopping when a heading at level <= parentLevel is encountered.
+function processSection(lines, startIdx, parentLevel) {
+  const result = [];
+  let i = startIdx;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const level = getHeadingLevel(line);
+
+    if (level !== null && level <= parentLevel) {
+      break;
+    }
+
+    if (level !== null) {
+      const [sectionContent, nextI] = processSection(lines, i + 1, level);
+      if (sectionContent.some((l) => l.trim() !== "")) {
+        result.push(line);
+        result.push(...sectionContent);
+      }
+      i = nextI;
+    } else {
+      result.push(line);
+      i++;
+    }
+  }
+
+  return [result, i];
+}
+
+// Inserts textToInsert into noteContent right before the next heading at the same
+// or higher level as targetHeading (fewer or equal # signs). Falls back to appending
+// at end of file if targetHeading is not found. leadingNewLine adds a blank line before
+// the inserted text.
+export const insertUnderHeading = (
+  noteContent,
+  targetHeading,
+  textToInsert,
+  leadingNewLine = false
+) => {
+  const escapedHeading = targetHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const headingLineRegex = new RegExp(`^${escapedHeading}$`, "mi");
+  const headingMatch = headingLineRegex.exec(noteContent);
+
+  if (!headingMatch) {
+    return noteContent + (leadingNewLine ? "\n" : "") + textToInsert;
+  }
+
+  const level = getHeadingLevel(targetHeading);
+  const searchStart = headingMatch.index + headingMatch[0].length;
+
+  const nextHeadingRegex = new RegExp(`\\n#{1,${level}} `, "g");
+  nextHeadingRegex.lastIndex = searchStart;
+  const nextMatch = nextHeadingRegex.exec(noteContent);
+
+  const insertionPoint = nextMatch !== null ? nextMatch.index : noteContent.length;
+  const prefix = leadingNewLine ? "\n" : "";
+
+  return (
+    noteContent.slice(0, insertionPoint) +
+    prefix +
+    textToInsert +
+    "\n" +
+    noteContent.slice(insertionPoint)
+  );
+};

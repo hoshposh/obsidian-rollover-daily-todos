@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { getTodos } from "./get-todos";
+import { getTodos, getSections, removeEmptyHeadings, insertUnderHeading } from "./get-todos";
 
 test("single todo element should return itself", () => {
   // GIVEN
@@ -534,4 +534,237 @@ test("should not match malformed todos", () => {
   ];
   const todos = getTodos({ lines });
   expect(todos).toStrictEqual(["- [ ] valid todo"]);
+});
+
+// ─── getSections ────────────────────────────────────────────────────────────
+
+test("getSections returns empty array when no todos exist", () => {
+  const lines = ["## Notes", "", "some text", "- not a todo"];
+  expect(getSections({ lines })).toStrictEqual([]);
+});
+
+test("getSections groups incomplete todos under their direct parent heading", () => {
+  const lines = [
+    "## Notes",
+    "",
+    "### Today's intent",
+    "- [ ] task1",
+    "",
+    "#### Personal Projects",
+    "",
+    "- [x] Setup SSO",
+    "- [ ] Create browser extension",
+    "",
+    "#### IRAP",
+    "",
+    "- [x] Review AI controls",
+    "- [ ] Organize call",
+  ];
+
+  const sections = getSections({ lines, doneStatusMarkers: "xX-" });
+
+  expect(sections).toStrictEqual([
+    { heading: "### Today's intent", incompleteTodos: ["- [ ] task1"] },
+    { heading: "#### Personal Projects", incompleteTodos: ["- [ ] Create browser extension"] },
+    { heading: "#### IRAP", incompleteTodos: ["- [ ] Organize call"] },
+  ]);
+});
+
+test("getSections excludes sections with only completed todos", () => {
+  const lines = [
+    "#### All done",
+    "- [x] done1",
+    "- [x] done2",
+    "#### Has todos",
+    "- [ ] still open",
+  ];
+
+  const sections = getSections({ lines, doneStatusMarkers: "xX-" });
+
+  expect(sections).toStrictEqual([
+    { heading: "#### Has todos", incompleteTodos: ["- [ ] still open"] },
+  ]);
+});
+
+test("getSections puts todos before any heading into null heading section", () => {
+  const lines = [
+    "- [ ] floating todo",
+    "- [x] done",
+    "## Notes",
+    "- [ ] under heading",
+  ];
+
+  const sections = getSections({ lines, doneStatusMarkers: "xX-" });
+
+  expect(sections).toStrictEqual([
+    { heading: null, incompleteTodos: ["- [ ] floating todo"] },
+    { heading: "## Notes", incompleteTodos: ["- [ ] under heading"] },
+  ]);
+});
+
+test("getSections respects withChildren option", () => {
+  const lines = [
+    "#### IRAP",
+    "- [ ] Setup meeting - @person",
+    "    - [i] Sent notes",
+    "- [ ] Organize call",
+  ];
+
+  const sections = getSections({ lines, withChildren: true, doneStatusMarkers: "xX" });
+
+  expect(sections).toStrictEqual([
+    {
+      heading: "#### IRAP",
+      incompleteTodos: [
+        "- [ ] Setup meeting - @person",
+        "    - [i] Sent notes",
+        "- [ ] Organize call",
+      ],
+    },
+  ]);
+});
+
+test("getSections respects custom doneStatusMarkers", () => {
+  const lines = [
+    "#### Section",
+    "- [b] blocked task",
+    "- [ ] open task",
+    "- [x] done task",
+  ];
+
+  const sections = getSections({ lines, doneStatusMarkers: "xXb" });
+
+  expect(sections).toStrictEqual([
+    { heading: "#### Section", incompleteTodos: ["- [ ] open task"] },
+  ]);
+});
+
+test("getSections handles multiple headings at same level independently", () => {
+  const lines = [
+    "#### Section A",
+    "- [ ] todo A",
+    "#### Section B",
+    "- [ ] todo B",
+  ];
+
+  const sections = getSections({ lines });
+
+  expect(sections).toStrictEqual([
+    { heading: "#### Section A", incompleteTodos: ["- [ ] todo A"] },
+    { heading: "#### Section B", incompleteTodos: ["- [ ] todo B"] },
+  ]);
+});
+
+// ─── removeEmptyHeadings ────────────────────────────────────────────────────
+
+test("removeEmptyHeadings returns lines unchanged when no headings present", () => {
+  const lines = ["- [x] done", "some text"];
+  expect(removeEmptyHeadings(lines)).toStrictEqual(lines);
+});
+
+test("removeEmptyHeadings removes heading whose section is only blank lines", () => {
+  const lines = [
+    "### Empty section",
+    "",
+    "",
+    "### Non-empty section",
+    "- [x] done",
+  ];
+  expect(removeEmptyHeadings(lines)).toStrictEqual([
+    "### Non-empty section",
+    "- [x] done",
+  ]);
+});
+
+test("removeEmptyHeadings keeps heading that has content directly under it", () => {
+  const lines = ["### Section", "- [x] done"];
+  expect(removeEmptyHeadings(lines)).toStrictEqual(["### Section", "- [x] done"]);
+});
+
+test("removeEmptyHeadings removes parent heading when all sub-sections are empty", () => {
+  const lines = [
+    "### Parent",
+    "#### Child 1",
+    "",
+    "#### Child 2",
+    "",
+    "## Unrelated",
+    "- [x] content",
+  ];
+  expect(removeEmptyHeadings(lines)).toStrictEqual(["## Unrelated", "- [x] content"]);
+});
+
+test("removeEmptyHeadings keeps parent heading when a sub-section has content", () => {
+  const lines = [
+    "### Parent",
+    "#### Child 1",
+    "- [x] done",
+    "#### Child 2",
+    "",
+  ];
+  expect(removeEmptyHeadings(lines)).toStrictEqual([
+    "### Parent",
+    "#### Child 1",
+    "- [x] done",
+  ]);
+});
+
+test("removeEmptyHeadings keeps parent heading when it has direct non-todo content", () => {
+  const lines = [
+    "### Parent",
+    "some paragraph text",
+    "#### Child",
+    "",
+  ];
+  expect(removeEmptyHeadings(lines)).toStrictEqual([
+    "### Parent",
+    "some paragraph text",
+  ]);
+});
+
+// ─── insertUnderHeading ─────────────────────────────────────────────────────
+
+test("insertUnderHeading inserts text right after heading when section is empty", () => {
+  const content = "### Today's intent\n\n### Other section\n";
+  const result = insertUnderHeading(content, "### Today's intent", "- [ ] new todo");
+  expect(result).toBe("### Today's intent\n- [ ] new todo\n\n### Other section\n");
+});
+
+test("insertUnderHeading appends after existing section content", () => {
+  const content = "### Today's intent\n- [ ] existing\n\n### Other section\n";
+  const result = insertUnderHeading(content, "### Today's intent", "- [ ] new todo");
+  expect(result).toBe("### Today's intent\n- [ ] existing\n- [ ] new todo\n\n### Other section\n");
+});
+
+test("insertUnderHeading inserts at end of section including sub-headings", () => {
+  const content = "### Today's intent\n\n#### Sub\n- [x] done\n\n### Other\n";
+  const result = insertUnderHeading(content, "### Today's intent", "#### New sub\n- [ ] todo");
+  expect(result).toBe("### Today's intent\n\n#### Sub\n- [x] done\n#### New sub\n- [ ] todo\n\n### Other\n");
+});
+
+test("insertUnderHeading falls back to end of file when heading not found", () => {
+  const content = "## Notes\n\nsome content\n";
+  const result = insertUnderHeading(content, "### Missing heading", "- [ ] todo");
+  expect(result).toBe("## Notes\n\nsome content\n- [ ] todo");
+});
+
+test("insertUnderHeading matches heading case-insensitively", () => {
+  // Today's note may capitalise the heading differently from yesterday's
+  const content = "#### Personal Projects\n\n#### Other\n";
+  const result = insertUnderHeading(content, "#### personal projects", "- [ ] todo");
+  expect(result).toBe("#### Personal Projects\n- [ ] todo\n\n#### Other\n");
+});
+
+test("insertUnderHeading still respects heading level when matching case-insensitively", () => {
+  // "#### Notes" in today and "### Notes" should NOT match (different level)
+  const content = "### Notes\n- [x] done\n\n#### Notes\n\n";
+  const result = insertUnderHeading(content, "#### notes", "- [ ] todo");
+  // todo lands under #### Notes (not ### Notes); trailing blank line follows the insert
+  expect(result).toBe("### Notes\n- [x] done\n\n#### Notes\n\n- [ ] todo\n");
+});
+
+test("insertUnderHeading with leadingNewLine adds blank line before inserted text", () => {
+  const content = "### Today's intent\n";
+  const result = insertUnderHeading(content, "### Today's intent", "- [ ] todo", true);
+  expect(result).toBe("### Today's intent\n\n- [ ] todo\n");
 });
