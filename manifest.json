@@ -1,10 +1,10 @@
 {
-  "id": "obsidian-rollover-daily-todos",
-  "name": "Rollover Daily Todos",
-  "version": "1.2.0",
+  "id": "rollover-daily-todos-lw",
+  "name": "Rollover Daily Todos (fork)",
+  "version": "1.2.1-preview.1",
   "minAppVersion": "0.12.12",
   "description": "This Obsidian.md plugin rolls over incomplete TODOs from the previous daily note to today's daily note. (https://obsidian.md). (Originally created by Matthew Sessions)",
-  "author": "Lukas Mölschl",
-  "authorUrl": "https://moelschl.com",
+  "author": "Lyndon Washington",
+  "authorUrl": "https://hoshposh.com",
   "isDesktopOnly": false
 }
