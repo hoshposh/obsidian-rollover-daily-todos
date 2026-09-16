@@ -130,7 +130,7 @@ This plugin can be installed within the `Third-party Plugins` tab within Obsidia
    git push
    ```
 
-4. **Create a GitHub release** with `main.js` and `manifest.json` attached as assets:
+4. **Create a GitHub release** with `main.js` and `manifest.json` attached as assets. Both files are required — BRAT uses `manifest.json` to read the version and `main.js` as the plugin bundle:
 
    ```bash
    gh release create 1.3.0 main.js manifest.json --title "1.3.0" --notes "Release notes here"
