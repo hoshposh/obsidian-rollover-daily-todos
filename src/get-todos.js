@@ -150,28 +150,36 @@ function getHeadingLevel(line) {
   return match ? match[1].length : null;
 }
 
-// Returns sections from `lines` that have incomplete todos, grouped by direct parent heading.
-// Each section is { heading: string|null, incompleteTodos: string[] }.
+// Returns sections from `lines` that have incomplete todos, each with the full ancestor
+// heading chain. Each section is { headingPath: string[], incompleteTodos: string[] }
+// where headingPath is ordered from outermost to innermost heading.
 export const getSections = ({
   lines,
   withChildren = false,
   doneStatusMarkers = null,
 }) => {
   const sections = [];
-  let currentHeading = null;
+  const headingStack = []; // [{ heading: string, level: number }]
   let sectionLines = [];
 
   const finalizeSection = () => {
     const incompleteTodos = getTodos({ lines: sectionLines, withChildren, doneStatusMarkers });
     if (incompleteTodos.length > 0) {
-      sections.push({ heading: currentHeading, incompleteTodos });
+      sections.push({
+        headingPath: headingStack.map((h) => h.heading),
+        incompleteTodos,
+      });
     }
   };
 
   for (const line of lines) {
-    if (getHeadingLevel(line) !== null) {
+    const level = getHeadingLevel(line);
+    if (level !== null) {
       finalizeSection();
-      currentHeading = line;
+      while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
+        headingStack.pop();
+      }
+      headingStack.push({ heading: line, level });
       sectionLines = [];
     } else {
       sectionLines.push(line);

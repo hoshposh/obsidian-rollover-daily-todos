@@ -281,8 +281,19 @@ export default class RolloverTodosPlugin extends Plugin {
             continue;
           }
 
-          if (section.heading === null || section.heading === templateHeading) {
-            // Todos belong directly under the template heading
+          // Build the path of sub-headings relative to the template heading.
+          // Strip everything up to and including the template heading itself so
+          // we only deal with the headings that need to be created/found inside it.
+          const templateIdx = section.headingPath.findIndex(
+            (h) => h.toLowerCase() === templateHeading.toLowerCase()
+          );
+          const relativePath =
+            templateIdx >= 0
+              ? section.headingPath.slice(templateIdx + 1)
+              : section.headingPath;
+
+          if (relativePath.length === 0) {
+            // Todos sit directly under the template heading
             const updated = insertUnderHeading(
               dailyNoteContent,
               templateHeading,
@@ -296,33 +307,35 @@ export default class RolloverTodosPlugin extends Plugin {
               dailyNoteContent = updated;
             }
           } else {
-            // Todos belong under a sub-heading: find or create it in today's note
-            const subHeadingExists = dailyNoteContent
-              .split(/\r?\n|\r|\n/g)
-              .some((l) => l.toLowerCase() === section.heading.toLowerCase());
+            // Walk the relative path to find the deepest heading that already
+            // exists in today's note — that becomes the insertion parent.
+            // Everything from there downward is created as a block.
+            const todayLines = dailyNoteContent.split(/\r?\n|\r|\n/g);
+            let insertUnder = templateHeading;
+            let firstMissingIdx = 0;
 
-            if (subHeadingExists) {
-              dailyNoteContent = insertUnderHeading(
-                dailyNoteContent,
-                section.heading,
-                todosString,
-                leadingNewLine
-              );
-            } else {
-              // Create the sub-heading inside the template heading section
-              const block = `${section.heading}\n${todosString}`;
-              const updated = insertUnderHeading(
-                dailyNoteContent,
-                templateHeading,
-                block,
-                leadingNewLine
-              );
-              if (updated === dailyNoteContent) {
-                templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily note. Rolling todos to end of file.`;
-                dailyNoteContent += `\n${block}`;
-              } else {
-                dailyNoteContent = updated;
+            for (let i = 0; i < relativePath.length; i++) {
+              const h = relativePath[i];
+              if (todayLines.some((l) => l.toLowerCase() === h.toLowerCase())) {
+                insertUnder = h;
+                firstMissingIdx = i + 1;
               }
+            }
+
+            const missingHeadings = relativePath.slice(firstMissingIdx);
+            const block = [...missingHeadings, todosString].join("\n");
+
+            const updated = insertUnderHeading(
+              dailyNoteContent,
+              insertUnder,
+              block,
+              leadingNewLine
+            );
+            if (updated === dailyNoteContent) {
+              templateHeadingNotFoundMessage = `Rollover couldn't find '${templateHeading}' in today's daily note. Rolling todos to end of file.`;
+              dailyNoteContent += `\n${block}`;
+            } else {
+              dailyNoteContent = updated;
             }
           }
         }

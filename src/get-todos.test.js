@@ -564,9 +564,9 @@ test("getSections groups incomplete todos under their direct parent heading", ()
   const sections = getSections({ lines, doneStatusMarkers: "xX-" });
 
   expect(sections).toStrictEqual([
-    { heading: "### Today's intent", incompleteTodos: ["- [ ] task1"] },
-    { heading: "#### Personal Projects", incompleteTodos: ["- [ ] Create browser extension"] },
-    { heading: "#### IRAP", incompleteTodos: ["- [ ] Organize call"] },
+    { headingPath: ["## Notes", "### Today's intent"], incompleteTodos: ["- [ ] task1"] },
+    { headingPath: ["## Notes", "### Today's intent", "#### Personal Projects"], incompleteTodos: ["- [ ] Create browser extension"] },
+    { headingPath: ["## Notes", "### Today's intent", "#### IRAP"], incompleteTodos: ["- [ ] Organize call"] },
   ]);
 });
 
@@ -582,11 +582,11 @@ test("getSections excludes sections with only completed todos", () => {
   const sections = getSections({ lines, doneStatusMarkers: "xX-" });
 
   expect(sections).toStrictEqual([
-    { heading: "#### Has todos", incompleteTodos: ["- [ ] still open"] },
+    { headingPath: ["#### Has todos"], incompleteTodos: ["- [ ] still open"] },
   ]);
 });
 
-test("getSections puts todos before any heading into null heading section", () => {
+test("getSections puts todos before any heading into empty headingPath", () => {
   const lines = [
     "- [ ] floating todo",
     "- [x] done",
@@ -597,8 +597,8 @@ test("getSections puts todos before any heading into null heading section", () =
   const sections = getSections({ lines, doneStatusMarkers: "xX-" });
 
   expect(sections).toStrictEqual([
-    { heading: null, incompleteTodos: ["- [ ] floating todo"] },
-    { heading: "## Notes", incompleteTodos: ["- [ ] under heading"] },
+    { headingPath: [], incompleteTodos: ["- [ ] floating todo"] },
+    { headingPath: ["## Notes"], incompleteTodos: ["- [ ] under heading"] },
   ]);
 });
 
@@ -614,7 +614,7 @@ test("getSections respects withChildren option", () => {
 
   expect(sections).toStrictEqual([
     {
-      heading: "#### IRAP",
+      headingPath: ["#### IRAP"],
       incompleteTodos: [
         "- [ ] Setup meeting - @person",
         "    - [i] Sent notes",
@@ -635,7 +635,7 @@ test("getSections respects custom doneStatusMarkers", () => {
   const sections = getSections({ lines, doneStatusMarkers: "xXb" });
 
   expect(sections).toStrictEqual([
-    { heading: "#### Section", incompleteTodos: ["- [ ] open task"] },
+    { headingPath: ["#### Section"], incompleteTodos: ["- [ ] open task"] },
   ]);
 });
 
@@ -650,8 +650,44 @@ test("getSections handles multiple headings at same level independently", () => 
   const sections = getSections({ lines });
 
   expect(sections).toStrictEqual([
-    { heading: "#### Section A", incompleteTodos: ["- [ ] todo A"] },
-    { heading: "#### Section B", incompleteTodos: ["- [ ] todo B"] },
+    { headingPath: ["#### Section A"], incompleteTodos: ["- [ ] todo A"] },
+    { headingPath: ["#### Section B"], incompleteTodos: ["- [ ] todo B"] },
+  ]);
+});
+
+test("getSections includes full heading ancestry for deeply nested todos", () => {
+  const lines = [
+    "### Today's intent",
+    "#### Personal projects",
+    "##### Seal workflow",
+    "- [x] Fix renovate workflow",
+    "- [/] Adopt temporal for orchestration",
+  ];
+
+  const sections = getSections({ lines, doneStatusMarkers: "xX" });
+
+  expect(sections).toStrictEqual([
+    {
+      headingPath: ["### Today's intent", "#### Personal projects", "##### Seal workflow"],
+      incompleteTodos: ["- [/] Adopt temporal for orchestration"],
+    },
+  ]);
+});
+
+test("getSections resets ancestry correctly when sibling headings are encountered", () => {
+  const lines = [
+    "#### Section A",
+    "##### Sub A",
+    "- [ ] todo under Sub A",
+    "#### Section B",
+    "- [ ] todo under Section B",
+  ];
+
+  const sections = getSections({ lines });
+
+  expect(sections).toStrictEqual([
+    { headingPath: ["#### Section A", "##### Sub A"], incompleteTodos: ["- [ ] todo under Sub A"] },
+    { headingPath: ["#### Section B"], incompleteTodos: ["- [ ] todo under Section B"] },
   ]);
 });
 
