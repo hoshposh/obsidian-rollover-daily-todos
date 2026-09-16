@@ -107,3 +107,30 @@ And the previous day might look like
 ## Installation
 
 This plugin can be installed within the `Third-party Plugins` tab within Obsidian
+
+## Development
+
+### Releasing a new version for BRAT testing
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tool) installs plugins directly from GitHub releases. To publish a testable build:
+
+1. **Bump the version** in `manifest.json` and `package.json` to the new version (e.g. `1.3.0`).
+
+2. **Build** the plugin:
+   ```bash
+   pnpm build
+   ```
+
+3. **Commit** the version bump and the updated `main.js`:
+   ```bash
+   git add manifest.json package.json main.js
+   git commit -m "Release 1.3.0"
+   git push
+   ```
+
+4. **Create a GitHub release** with `main.js` and `manifest.json` attached as assets:
+   ```bash
+   gh release create 1.3.0 main.js manifest.json --title "1.3.0" --notes "Release notes here"
+   ```
+
+5. **Install via BRAT** in Obsidian: open BRAT settings → *Add Beta Plugin* → enter `hoshposh/obsidian-rollover-daily-todos`. BRAT will pull the latest release automatically.
