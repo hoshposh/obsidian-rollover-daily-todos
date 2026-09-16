@@ -18,3 +18,4 @@ data.json
 
 # local developer scripts
 deployLocally.js
+.prettierignore

@@ -83,7 +83,7 @@ The plugin supports Unicode characters, including complex emoji and grapheme clu
 - At a minimum, they need to look like: `start of line | tabs`-` `[` `]`Your text goes here`
 - If you use spaces instead of tabs at the start of the line, the behavior of the plugin can be inconsistent. Sometimes it'll roll items over, but not delete them from the previous day when you have that option toggled on.
 
-2. Sometimes, if you trigger the `rollover` function too quickly, it will read the state of a file before the new data was saved to disk. For example, if you add a new incomplete todo to yesterday's daily note, and then quickly run the `Rollover Todos Now` command, it may grab the state of the file a second or two before you ran the command. If this happens, just run the `Undo last rollover` command. Wait a second or two, then try rolling over todos again.
+1. Sometimes, if you trigger the `rollover` function too quickly, it will read the state of a file before the new data was saved to disk. For example, if you add a new incomplete todo to yesterday's daily note, and then quickly run the `Rollover Todos Now` command, it may grab the state of the file a second or two before you ran the command. If this happens, just run the `Undo last rollover` command. Wait a second or two, then try rolling over todos again.
 
 For example (no template heading, empty todos toggled on):
 
@@ -102,7 +102,7 @@ And the previous day might look like
 - [x] Do the dishes
 ```
 
-3. There are sometimes conflicts with other plugins that deal with new notes -- particularly the Templater plugin. In these situations, your todos may be removed from your previous note, and then not be saved into your new daily note. The simplest remedy is to disable the automatic rollover, and instead trigger it manually.
+1. There are sometimes conflicts with other plugins that deal with new notes -- particularly the Templater plugin. In these situations, your todos may be removed from your previous note, and then not be saved into your new daily note. The simplest remedy is to disable the automatic rollover, and instead trigger it manually.
 
 ## Installation
 
@@ -117,11 +117,13 @@ This plugin can be installed within the `Third-party Plugins` tab within Obsidia
 1. **Bump the version** in `manifest.json` and `package.json` to the new version (e.g. `1.3.0`).
 
 2. **Build** the plugin:
+
    ```bash
    pnpm build
    ```
 
 3. **Commit** the version bump and the updated `main.js`:
+
    ```bash
    git add manifest.json package.json main.js
    git commit -m "Release 1.3.0"
@@ -129,8 +131,9 @@ This plugin can be installed within the `Third-party Plugins` tab within Obsidia
    ```
 
 4. **Create a GitHub release** with `main.js` and `manifest.json` attached as assets:
+
    ```bash
    gh release create 1.3.0 main.js manifest.json --title "1.3.0" --notes "Release notes here"
    ```
 
-5. **Install via BRAT** in Obsidian: open BRAT settings → *Add Beta Plugin* → enter `hoshposh/obsidian-rollover-daily-todos`. BRAT will pull the latest release automatically.
+5. **Install via BRAT** in Obsidian: open BRAT settings → _Add Beta Plugin_ → enter `hoshposh/obsidian-rollover-daily-todos`. BRAT will pull the latest release automatically.
